@@ -1,6 +1,7 @@
 const TABLE_CODE_LENGTH = 6;
 const TABLE_CODE_RE = /^[A-Z0-9]{6}$/;
-const START_COOLDOWN_MS = 10 * 60 * 1000;
+export const MS_PER_MINUTE = 60 * 1000;
+const START_COOLDOWN_MS = 10 * MS_PER_MINUTE;
 
 export const normalizeTableCode = (value: string) => value.trim().toUpperCase();
 
@@ -33,4 +34,4 @@ export const canStartMatch = (
   return { allowed: false, waitMs: START_COOLDOWN_MS - elapsedMs };
 };
 
-export const START_COOLDOWN_MINUTES = START_COOLDOWN_MS / 60000;
+export const START_COOLDOWN_MINUTES = START_COOLDOWN_MS / MS_PER_MINUTE;

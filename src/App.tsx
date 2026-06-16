@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, googleAuthProvider } from "./firebase";
 import {
+  MS_PER_MINUTE,
   START_COOLDOWN_MINUTES,
   canStartMatch,
   generateTableCode,
@@ -94,6 +95,7 @@ export default function App() {
   const [joinInfo, setJoinInfo] = useState("");
   const [feedback, setFeedback] = useState("");
   const [newTableName, setNewTableName] = useState("");
+  const qrServiceUrl = import.meta.env.VITE_QR_SERVICE_URL || "https://api.qrserver.com/v1/create-qr-code/";
 
   const adminEmails = useMemo(
     () =>
@@ -174,18 +176,22 @@ export default function App() {
     );
 
     return onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type !== "added") {
-          return;
-        }
+      const handleChanges = async () => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type !== "added") {
+            continue;
+          }
 
-        const message = String(change.doc.data().message || "A foosball match has started.");
-        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          new Notification("Foosball Matchmaker", { body: message });
-        }
+          const message = String(change.doc.data().message || "A foosball match has started.");
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification("Foosball Matchmaker", { body: message });
+          }
 
-        await updateDoc(change.doc.ref, { read: true });
-      });
+          await updateDoc(change.doc.ref, { read: true });
+        }
+      };
+
+      void handleChanges().catch(() => {});
     });
   }, [user]);
 
@@ -249,7 +255,7 @@ export default function App() {
     const availability = canStartMatch(latestDate);
 
     if (!availability.allowed) {
-      const minutes = Math.ceil(availability.waitMs / 60000);
+      const minutes = Math.ceil(availability.waitMs / MS_PER_MINUTE);
       setFeedback(`Another match was recently started. Try again in ${minutes} minute(s).`);
       return;
     }
@@ -333,7 +339,7 @@ export default function App() {
   };
 
   const qrUrl = selectedTable
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`${window.location.origin}?table=${selectedTable}`)}`
+    ? `${qrServiceUrl}?size=220x220&data=${encodeURIComponent(`${window.location.origin}?table=${selectedTable}`)}`
     : "";
 
   return (
