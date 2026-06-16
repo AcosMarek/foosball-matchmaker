@@ -61,3 +61,36 @@ deno task dev
 deno task build
 deno task test
 ```
+
+## Firebase Hosting
+
+The project is configured for [Firebase Hosting](https://firebase.google.com/docs/hosting).
+
+### First-time setup
+
+1. Install the Firebase CLI:
+   ```bash
+   npm install -g firebase-tools
+   ```
+2. Log in to Firebase:
+   ```bash
+   firebase login
+   ```
+3. Set your Firebase project ID in `.firebaserc`:
+   ```json
+   {
+     "projects": {
+       "default": "your-actual-project-id"
+     }
+   }
+   ```
+
+### Deploy
+
+```bash
+deno task build   # or: npm run build
+firebase deploy
+```
+
+The `firebase.json` file points to the `dist` folder produced by the build step and
+configures all routes to be handled by `index.html` (required for client-side routing).
