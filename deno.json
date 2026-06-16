@@ -1,0 +1,10 @@
+{
+  "tasks": {
+    "dev": "npm:vite",
+    "build": "npm:tsc -b && npm:vite build",
+    "test": "npm:vitest run"
+  },
+  "fmt": {
+    "lineWidth": 100
+  }
+}
