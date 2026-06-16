@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canStartMatch, isValidTableCode, normalizeTableCode } from "./matchmaking";
+import {
+  buildMatchDisposition,
+  canStartMatch,
+  isValidTableCode,
+  normalizeTableCode,
+} from "./matchmaking";
 
 describe("table code handling", () => {
   it("normalizes and validates six character codes", () => {
@@ -31,5 +36,59 @@ describe("match start cooldown", () => {
     const tenMinutesAgo = new Date("2026-01-01T09:50:00.000Z");
 
     expect(canStartMatch(tenMinutesAgo, now)).toEqual({ allowed: true, waitMs: 0 });
+  });
+});
+
+describe("match disposition", () => {
+  const players = [
+    { uid: "1", displayName: "Alice" },
+    { uid: "2", displayName: "Bob" },
+    { uid: "3", displayName: "Carol" },
+    { uid: "4", displayName: "Dave" },
+  ];
+
+  it("returns null until enough players have joined", () => {
+    expect(buildMatchDisposition(players.slice(0, 1), 2)).toBeNull();
+    expect(buildMatchDisposition(players.slice(0, 3), 4)).toBeNull();
+  });
+
+  it("pairs two players as solo opponents", () => {
+    const disposition = buildMatchDisposition(players.slice(0, 2), 2);
+
+    expect(disposition?.size).toBe(2);
+    expect(disposition?.teams[0]).toMatchObject({
+      color: "Red",
+      players: [{ player: { displayName: "Alice" }, position: "solo" }],
+    });
+    expect(disposition?.teams[1]).toMatchObject({
+      color: "Blue",
+      players: [{ player: { displayName: "Bob" }, position: "solo" }],
+    });
+  });
+
+  it("splits four players into two colored teams with front and back", () => {
+    const disposition = buildMatchDisposition(players, 4);
+
+    expect(disposition?.size).toBe(4);
+    expect(disposition?.teams[0]).toMatchObject({
+      color: "Red",
+      players: [
+        { player: { displayName: "Alice" }, position: "front" },
+        { player: { displayName: "Bob" }, position: "back" },
+      ],
+    });
+    expect(disposition?.teams[1]).toMatchObject({
+      color: "Blue",
+      players: [
+        { player: { displayName: "Carol" }, position: "front" },
+        { player: { displayName: "Dave" }, position: "back" },
+      ],
+    });
+  });
+
+  it("uses the first players in join order when more have joined", () => {
+    const disposition = buildMatchDisposition([...players, { uid: "5", displayName: "Eve" }], 4);
+
+    expect(disposition?.teams[1].players[1].player.displayName).toBe("Dave");
   });
 });
