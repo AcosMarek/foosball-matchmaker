@@ -1,55 +1,19 @@
 import { useState } from "react";
-import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
-import { getLatestSessionStart, joinSession, registerOnTable, startSession } from "../api";
+import { joinSession, registerOnTable, startSession } from "../api";
 import { useNow } from "../hooks";
 import {
-  MS_PER_MINUTE,
-  START_COOLDOWN_MINUTES,
+  RESET_MINUTES,
   SUPPORTED_PLAYER_COUNTS,
   buildMatchDisposition,
   canStartMatch,
+  fillWindowRemaining,
+  matchPhase,
   type MatchSize,
 } from "../matchmaking";
-import { Badge, Button, Card, Hint, PrimaryButton, Row } from "../ui";
+import { Button, Card, Hint, PrimaryButton, Row } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
-import { DispositionAlert } from "./DispositionAlert";
-
-const PlayerChips = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-`;
-
-const Chip = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.65rem;
-  border-radius: 999px;
-  background: #f2f5f8;
-  border: 1px solid #e0e6ea;
-  font-size: 0.85rem;
-`;
-
-const ChipIndex = styled.span`
-  font-weight: 700;
-  color: #2e7d32;
-`;
-
-const Countdown = styled.p`
-  margin: 0.5rem 0 0;
-  font-weight: 600;
-  color: #b26a00;
-`;
-
-const formatCountdown = (ms: number): string => {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-};
+import { MatchStatus } from "./MatchStatus";
 
 type Props = {
   user: User | null;
@@ -73,9 +37,16 @@ export const MatchmakingCard = ({
   const waiting = disposition
     ? sessionPlayers.slice(disposition.size).map((player) => player.displayName)
     : [];
-  const matchFull = !!disposition;
 
   const now = useNow(!!activeSession);
+  const phase = activeSession
+    ? matchPhase(activeSession.startedAt, sessionPlayers.length, targetPlayers, new Date(now))
+    : null;
+  const liveSession = !!activeSession && phase !== "expired";
+  const matchFull = phase === "ready";
+  const fillRemainingMs = activeSession
+    ? fillWindowRemaining(activeSession.startedAt, new Date(now))
+    : 0;
   const cooldownMs = activeSession
     ? canStartMatch(activeSession.startedAt, new Date(now)).waitMs
     : 0;
@@ -87,13 +58,6 @@ export const MatchmakingCard = ({
 
     try {
       await registerOnTable(user, selectedTable);
-
-      const availability = canStartMatch(await getLatestSessionStart(selectedTable));
-      if (!availability.allowed) {
-        const minutes = Math.ceil(availability.waitMs / MS_PER_MINUTE);
-        setFeedback(`Another match was recently started. Try again in ${minutes} minute(s).`);
-        return;
-      }
 
       const notified = await startSession(user, selectedTable, size);
       setFeedback(
@@ -131,7 +95,7 @@ export const MatchmakingCard = ({
           <PrimaryButton
             key={size}
             type="button"
-            disabled={!user || !selectedTable || !!activeSession}
+            disabled={!user || !selectedTable || liveSession}
             onClick={() => handleStart(size)}
           >
             Start {size}-player match
@@ -139,47 +103,28 @@ export const MatchmakingCard = ({
         ))}
         <Button
           type="button"
-          disabled={!user || !selectedTable || !activeSession || matchFull}
+          disabled={!user || !selectedTable || !liveSession || matchFull}
           onClick={handleJoin}
         >
           Join active match
         </Button>
       </Row>
       <Hint>
-        Only one new match may be started every {START_COOLDOWN_MINUTES} minutes per table.
+        A match resets if it doesn’t fill within {RESET_MINUTES} minutes, so anyone can start again.
       </Hint>
-      {activeSession && cooldownMs > 0 && (
-        <Countdown>New match can be launched in {formatCountdown(cooldownMs)}.</Countdown>
-      )}
-      {activeSession ? (
-        <Hint>
-          <Badge>{activeSession.targetPlayers}-player</Badge> Active match at {selectedTable}: started
-          by {activeSession.startedByName} at {activeSession.startedAt.toLocaleTimeString()}.
-        </Hint>
-      ) : (
-        <Hint>No active match right now.</Hint>
-      )}
-      {activeSession && (
-        <>
-          <Hint>
-            Players joined: {sessionPlayers.length} / {targetPlayers}
-            {sessionPlayers.length < targetPlayers
-              ? ` (need ${targetPlayers - sessionPlayers.length} more)`
-              : ""}
-          </Hint>
-          {sessionPlayers.length > 0 && (
-            <PlayerChips>
-              {sessionPlayers.map((player, index) => (
-                <Chip key={player.uid}>
-                  <ChipIndex>{index + 1}</ChipIndex>
-                  {player.displayName}
-                </Chip>
-              ))}
-            </PlayerChips>
-          )}
-        </>
-      )}
-      {disposition && <DispositionAlert disposition={disposition} waiting={waiting} />}
+      <MatchStatus
+        phase={phase}
+        liveSession={liveSession}
+        matchFull={matchFull}
+        selectedTable={selectedTable}
+        activeSession={activeSession}
+        sessionPlayers={sessionPlayers}
+        targetPlayers={targetPlayers}
+        disposition={disposition}
+        waiting={waiting}
+        fillRemainingMs={fillRemainingMs}
+        cooldownMs={cooldownMs}
+      />
       {feedback && <Hint>{feedback}</Hint>}
     </Card>
   );

@@ -135,6 +135,25 @@ export const useSessionPlayers = (
   return sessionPlayers;
 };
 
+// Counts everyone registered to receive notifications for the selected table,
+// updating live as people join or leave. Reads require a signed-in user.
+export const useTableMemberCount = (user: User | null, selectedTable: string): number => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!user || !selectedTable) {
+      setCount(0);
+      return;
+    }
+
+    const q = query(collection(db, "tableMembers"), where("tableCode", "==", selectedTable));
+
+    return onSnapshot(q, (snapshot) => setCount(snapshot.size));
+  }, [user, selectedTable]);
+
+  return count;
+};
+
 export const useIncomingNotifications = (user: User | null): void => {
   useEffect(() => {
     if (!user) {

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildMatchDisposition,
   canStartMatch,
+  fillWindowRemaining,
   isValidTableCode,
+  matchPhase,
   normalizeTableCode,
 } from "./matchmaking";
 
@@ -90,5 +92,28 @@ describe("match disposition", () => {
     const disposition = buildMatchDisposition([...players, { uid: "5", displayName: "Eve" }], 4);
 
     expect(disposition?.teams[1].players[1].player.displayName).toBe("Dave");
+  });
+});
+
+describe("match fill window", () => {
+  const start = new Date("2026-01-01T10:00:00.000Z");
+
+  it("counts down the five minute fill window", () => {
+    const twoMinutesIn = new Date("2026-01-01T10:02:00.000Z");
+    expect(fillWindowRemaining(start, twoMinutesIn)).toBe(3 * 60 * 1000);
+  });
+
+  it("is ready once enough players joined", () => {
+    expect(matchPhase(start, 4, 4, start)).toBe("ready");
+  });
+
+  it("is filling within five minutes when short of players", () => {
+    const fourMinutesIn = new Date("2026-01-01T10:04:00.000Z");
+    expect(matchPhase(start, 2, 4, fourMinutesIn)).toBe("filling");
+  });
+
+  it("expires after five minutes without enough players", () => {
+    const sixMinutesIn = new Date("2026-01-01T10:06:00.000Z");
+    expect(matchPhase(start, 2, 4, sixMinutesIn)).toBe("expired");
   });
 });

@@ -111,3 +111,27 @@ export const buildMatchDisposition = (
     ],
   };
 };
+
+export const RESET_MINUTES = 5;
+const RESET_MS = RESET_MINUTES * MS_PER_MINUTE;
+
+export type MatchPhase = "filling" | "ready" | "expired";
+
+// Time (ms) left in the fill window before an unfilled match resets.
+export const fillWindowRemaining = (startedAt: Date, now: Date = new Date()): number =>
+  Math.max(0, RESET_MS - (now.getTime() - startedAt.getTime()));
+
+// "ready" once enough players joined, "filling" while still gathering players within the
+// window, and "expired" once the window elapses without enough players (matchmaking resets).
+export const matchPhase = (
+  startedAt: Date,
+  playerCount: number,
+  requiredPlayers: number,
+  now: Date = new Date(),
+): MatchPhase => {
+  if (playerCount >= requiredPlayers) {
+    return "ready";
+  }
+
+  return fillWindowRemaining(startedAt, now) > 0 ? "filling" : "expired";
+};
