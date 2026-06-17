@@ -2,19 +2,22 @@ import styled from "@emotion/styled";
 import type { MatchDisposition, TeamPlayer } from "../matchmaking";
 
 const GreenAlert = styled.div`
+  /* M3 tonal container — primary */
   margin-top: 0.9rem;
-  border: 1px solid #2e7d32;
-  background: linear-gradient(180deg, #eafaef, #e3f5e8);
-  color: #1b5e20;
-  border-radius: 12px;
+  border: none;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: var(--md-shape-large);
   padding: 1rem 1.1rem;
-  box-shadow: 0 6px 18px rgba(46, 125, 50, 0.15);
+  box-shadow: var(--md-elevation-1);
 `;
 
 const AlertTitle = styled.div`
-  font-weight: 700;
+  /* M3 title-medium */
+  font-weight: 600;
   margin-bottom: 0.5rem;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
 `;
 
 const TeamLine = styled.div`
@@ -35,7 +38,8 @@ const ColorDot = styled.span`
 
 const Waiting = styled.div`
   margin-top: 0.5rem;
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
 `;
 
 const describeTeamPlayer = (teamPlayer: TeamPlayer): string => {

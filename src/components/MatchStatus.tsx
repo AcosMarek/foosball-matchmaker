@@ -12,31 +12,34 @@ const PlayerChips = styled.div`
 `;
 
 const Chip = styled.span`
+  /* M3 assist chip */
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.25rem 0.65rem;
-  border-radius: 999px;
-  background: #f2f5f8;
-  border: 1px solid #e0e6ea;
-  font-size: 0.85rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--md-shape-small);
+  background: var(--md-sys-color-surface-container-high);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
 `;
 
 const ChipIndex = styled.span`
   font-weight: 700;
-  color: #2e7d32;
+  color: var(--md-sys-color-primary);
 `;
 
 const Countdown = styled.p`
   margin: 0.5rem 0 0;
-  font-weight: 600;
-  color: #b26a00;
+  font-weight: 500;
+  color: var(--app-warning);
 `;
 
 const ResetNotice = styled.p`
   margin: 0.5rem 0 0;
-  font-weight: 600;
-  color: #b3261e;
+  font-weight: 500;
+  color: var(--md-sys-color-error);
 `;
 
 const formatCountdown = (ms: number): string => {
