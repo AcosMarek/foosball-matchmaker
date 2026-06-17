@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Foosball Matchmaker — Flyer</title>
+    <style>
+      /* ---- Print setup: single A4 portrait page ---- */
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+
+      :root {
+        --green: #386a20;
+        --green-container: #b7f397;
+        --on-green-container: #042100;
+        --teal: #19686a;
+        --ink: #191d17;
+        --ink-soft: #424940;
+        --bg: #edf1ea;
+        --white: #ffffff;
+        --outline: #c2c9bc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Roboto", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+        color: var(--ink);
+        background: #d7ddd2; /* screen backdrop only */
+        display: flex;
+        justify-content: center;
+        padding: 24px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      /* ---- Floating print button (screen only) ---- */
+      .toolbar {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 10;
+      }
+      .print-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.4rem;
+        border: none;
+        border-radius: 9999px;
+        background: var(--green);
+        color: var(--white);
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      }
+      .print-btn:hover {
+        background: #2f5a1a;
+      }
+
+      /* ---- The flyer page ---- */
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        background: var(--white);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+      }
+
+      /* ---- Header (light) ---- */
+      .band {
+        display: flex;
+        align-items: center;
+        gap: 4mm;
+        padding: 10mm 16mm 7mm;
+        border-bottom: 1.5px solid var(--outline);
+      }
+
+      .badge {
+        flex: none;
+        width: 14mm;
+        height: 14mm;
+        border-radius: 3.5mm;
+        background: var(--green-container);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .badge svg {
+        width: 10mm;
+        height: 10mm;
+      }
+
+      .wordmark {
+        line-height: 1.1;
+      }
+      .wordmark .name {
+        font-size: 21pt;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+      }
+      .wordmark .tag {
+        margin-top: 1mm;
+        font-size: 10.5pt;
+        font-weight: 600;
+        color: var(--green);
+      }
+
+      /* ---- Body ---- */
+      main {
+        flex: 1;
+        padding: 9mm 16mm 10mm;
+        display: flex;
+        flex-direction: column;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24pt;
+        line-height: 1.12;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        color: var(--ink);
+      }
+      h1 .accent {
+        color: var(--green);
+      }
+
+      .lead {
+        margin: 4mm 0 0;
+        font-size: 12pt;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 172mm;
+      }
+
+      /* ---- How it works (single column) ---- */
+      .how {
+        margin-top: 8mm;
+      }
+      .how h2 {
+        margin: 0 0 4mm;
+        font-size: 10.5pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--green);
+      }
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3.5mm;
+      }
+      .step {
+        display: flex;
+        align-items: center;
+        gap: 5mm;
+        background: var(--bg);
+        border-radius: 4mm;
+        padding: 4mm 6mm;
+      }
+      .step .num {
+        flex: none;
+        width: 9.5mm;
+        height: 9.5mm;
+        border-radius: 50%;
+        background: var(--green);
+        color: var(--white);
+        font-weight: 700;
+        font-size: 13pt;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .step .title {
+        margin: 0 0 0.8mm;
+        font-size: 12pt;
+        font-weight: 700;
+      }
+      .step .desc {
+        font-size: 10.5pt;
+        line-height: 1.4;
+        color: var(--ink-soft);
+      }
+
+      /* ---- QR call-to-action panel ---- */
+      .qr-panel {
+        margin-top: 9mm;
+        background: var(--green-container);
+        border-radius: 5mm;
+        padding: 7mm;
+        display: flex;
+        align-items: center;
+        gap: 7mm;
+      }
+      .qr-box {
+        flex: none;
+        width: 44mm;
+        height: 44mm;
+        background: var(--white);
+        border-radius: 3mm;
+        padding: 2.5mm;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .qr-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .qr-cta .big {
+        font-size: 21pt;
+        font-weight: 700;
+        color: var(--on-green-container);
+        line-height: 1.1;
+      }
+      .qr-cta .sub {
+        margin-top: 2.5mm;
+        font-size: 11pt;
+        color: #1c3a10;
+      }
+      .qr-cta .table-line {
+        margin-top: 5mm;
+        font-size: 11pt;
+        color: #1c3a10;
+      }
+      .qr-cta .table-line .code {
+        display: inline-block;
+        font-family: "Roboto Mono", ui-monospace, "Courier New", monospace;
+        font-weight: 700;
+        font-size: 13.5pt;
+        letter-spacing: 0.06em;
+        padding: 1mm 3mm;
+        border-radius: 2mm;
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--on-green-container);
+      }
+
+      .closer {
+        margin-top: 9mm;
+        font-size: 11.5pt;
+        color: var(--ink-soft);
+      }
+      .closer strong {
+        color: var(--green);
+        font-weight: 700;
+      }
+
+      @media print {
+        body {
+          background: none;
+          padding: 0;
+        }
+        .toolbar {
+          display: none;
+        }
+        .page {
+          box-shadow: none;
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <button type="button" class="print-btn" onclick="window.print()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Print this flyer
+      </button>
+    </div>
+
+    <div class="page">
+      <header class="band">
+        <div class="badge">
+          <!-- App logo: RodMark -->
+          <svg viewBox="0 0 30 30" fill="none" role="img" aria-label="Foosball">
+            <rect x="3" y="6" width="24" height="3" rx="1.5" fill="#386a20" />
+            <rect x="6" y="9" width="3.4" height="11" rx="1.7" fill="#386a20" />
+            <rect x="13.3" y="9" width="3.4" height="11" rx="1.7" fill="#386a20" />
+            <rect x="20.6" y="9" width="3.4" height="11" rx="1.7" fill="#386a20" />
+            <circle cx="15" cy="24.5" r="2.4" fill="#19686a" />
+          </svg>
+        </div>
+        <div class="wordmark">
+          <div class="name">Foosball Matchmaker</div>
+          <div class="tag">Scan. Match. Play.</div>
+        </div>
+      </header>
+
+      <main>
+        <h1>Up for a <span class="accent">game of foosball?</span></h1>
+        <p class="lead">
+          Foosball Matchmaker rounds up players for a game at this table — scan to start a match or
+          jump into one that's filling up, and everyone here gets pinged when it's on.
+        </p>
+
+        <section class="how">
+          <h2>How it works</h2>
+          <ol class="steps">
+            <li class="step">
+              <div class="num">1</div>
+              <div>
+                <div class="title">Scan the code</div>
+                <div class="desc">Point your phone camera at the QR — no app to install.</div>
+              </div>
+            </li>
+            <li class="step">
+              <div class="num">2</div>
+              <div>
+                <div class="title">Sign in &amp; you're on this table</div>
+                <div class="desc">Continue with Google — you land straight on this table.</div>
+              </div>
+            </li>
+            <li class="step">
+              <div class="num">3</div>
+              <div>
+                <div class="title">Start or jump in</div>
+                <div class="desc">Tap New 1v1 or 2v2 and everyone at the table gets pinged — or jump into a game that's filling up.</div>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section class="qr-panel">
+          <div class="qr-box">
+            <img id="qr" src="" alt="Scan to open Foosball Matchmaker" />
+          </div>
+          <div class="qr-cta">
+            <div class="big">Scan to play</div>
+            <div class="sub">Point your phone camera at the code</div>
+            <div class="table-line" id="table-line">
+              Table <span class="code" data-table-code>&mdash;</span>
+            </div>
+          </div>
+        </section>
+
+        <p class="closer">
+          Your next game is <strong>one scan away.</strong>
+        </p>
+      </main>
+
+    </div>
+
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var table = (params.get("table") || "").trim().toUpperCase();
+        var origin = window.location.origin;
+        var hasOrigin = origin && origin !== "null";
+        var base = hasOrigin ? origin : "https://example.web.app";
+
+        var target = table ? base + "/?table=" + encodeURIComponent(table) : base + "/";
+        var qrService = "https://api.qrserver.com/v1/create-qr-code/";
+        var qrUrl = qrService + "?size=600x600&margin=0&data=" + encodeURIComponent(target);
+
+        var img = document.getElementById("qr");
+        img.src = qrUrl;
+        img.alt = table
+          ? "Scan to join table " + table + " on Foosball Matchmaker"
+          : "Scan to open Foosball Matchmaker";
+
+        document.querySelectorAll("[data-table-code]").forEach(function (el) {
+          el.textContent = table || "any table";
+        });
+
+        if (!table) {
+          document.getElementById("table-line").style.display = "none";
+        }
+
+        if (table) {
+          document.title = "Foosball Matchmaker — Table " + table;
+        }
+      })();
+    </script>
+  </body>
+</html>

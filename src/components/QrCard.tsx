@@ -1,5 +1,5 @@
 import styled from "@emotion/styled";
-import { Eyebrow, Icon, Mono, OutlinedCard } from "../ui";
+import { Button, Eyebrow, Icon, Mono, OutlinedCard } from "../ui";
 
 const qrServiceUrl =
   import.meta.env.VITE_QR_SERVICE_URL || "https://api.qrserver.com/v1/create-qr-code/";
@@ -25,6 +25,17 @@ const Text = styled.p`
   color: var(--md-sys-color-on-surface-variant);
 `;
 
+const Info = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+`;
+
+const FlyerButton = styled(Button.withComponent("a"))`
+  text-decoration: none;
+`;
+
 type Props = {
   selectedTable: string;
 };
@@ -43,9 +54,21 @@ export const QrCard = ({ selectedTable }: Props) => {
       </Eyebrow>
       <Body>
         <Qr alt={`QR code for table ${selectedTable}`} src={qrUrl} width={96} height={96} />
-        <Text>
-          Scan to jump straight onto <Mono>{selectedTable}</Mono>.
-        </Text>
+        <Info>
+          <Text>
+            Scan to jump straight onto <Mono>{selectedTable}</Mono>.
+          </Text>
+          <FlyerButton
+            href={`/flier/index.html?table=${encodeURIComponent(selectedTable)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon size={18} aria-hidden>
+              print
+            </Icon>
+            Printable flyer
+          </FlyerButton>
+        </Info>
       </Body>
     </OutlinedCard>
   );
