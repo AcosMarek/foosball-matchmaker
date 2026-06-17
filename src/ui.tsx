@@ -79,6 +79,39 @@ export const GlobalStyles = () => (
         margin: 0 0 0.75rem;
         color: var(--md-sys-color-on-surface);
       }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(56, 106, 32, 0.4);
+        }
+        70% {
+          box-shadow: 0 0 0 9px rgba(56, 106, 32, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(56, 106, 32, 0);
+        }
+      }
+
+      @keyframes chipIn {
+        from {
+          opacity: 0;
+          transform: translateY(5px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
     `}
   />
 );
@@ -89,28 +122,35 @@ export const Wrapper = styled.main`
   padding: 2rem 1.25rem 3rem;
 `;
 
-export const Header = styled.header`
-  text-align: center;
-  margin-bottom: 1.5rem;
+export const TopBar = styled.header`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.75rem;
 `;
 
-export const Title = styled.h1`
-  /* M3 display-small */
-  margin: 0;
-  font-size: 2.25rem;
-  line-height: 2.75rem;
-  font-weight: 400;
-  letter-spacing: 0;
+export const Brand = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  user-select: none;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--md-sys-color-on-surface);
 `;
 
-export const Subtitle = styled.p`
-  /* M3 body-large */
-  margin: 0.5rem 0 0;
-  font-size: 1rem;
-  line-height: 1.5rem;
-  color: var(--md-sys-color-on-surface-variant);
-`;
+export const RodMark = ({ size = 30 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 30 30" fill="none" role="img" aria-label="Foosball">
+    <rect x="3" y="6" width="24" height="3" rx="1.5" fill="var(--md-sys-color-primary)" />
+    <rect x="6" y="9" width="3.4" height="11" rx="1.7" fill="var(--md-sys-color-primary)" />
+    <rect x="13.3" y="9" width="3.4" height="11" rx="1.7" fill="var(--md-sys-color-primary)" />
+    <rect x="20.6" y="9" width="3.4" height="11" rx="1.7" fill="var(--md-sys-color-primary)" />
+    <circle cx="15" cy="24.5" r="2.4" fill="var(--md-sys-color-tertiary)" />
+  </svg>
+);
 
 export const Card = styled.section`
   /* M3 elevated card */
@@ -261,3 +301,242 @@ export const Badge = styled.span`
   font-weight: 500;
   letter-spacing: 0.1px;
 `;
+
+export const TonalButton = styled(Button)`
+  /* M3 filled-tonal button */
+  background-color: var(--md-sys-color-secondary-container);
+  border-color: transparent;
+  color: var(--md-sys-color-on-secondary-container);
+  &:hover:not(:disabled) {
+    background-color: var(--md-sys-color-secondary-container);
+    background-image: linear-gradient(rgba(19, 31, 13, 0.08), rgba(19, 31, 13, 0.08));
+    box-shadow: var(--md-elevation-1);
+  }
+  &:active:not(:disabled) {
+    background-image: linear-gradient(rgba(19, 31, 13, 0.12), rgba(19, 31, 13, 0.12));
+    box-shadow: none;
+  }
+  &:disabled {
+    background-color: var(--md-state-disabled-bg);
+    background-image: none;
+    color: var(--md-state-disabled-content);
+  }
+`;
+
+export const TextButton = styled(Button)`
+  /* M3 text button */
+  border-color: transparent;
+  padding: 0 0.75rem;
+`;
+
+export const Icon = styled.span<{ size?: number; fill?: number }>`
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: ${(props) => props.size ?? 20}px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" ${(props) => props.fill ?? 0}, "wght" 400, "GRAD" 0, "opsz" 24;
+`;
+
+export const IconButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--md-shape-full);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  &:hover:not(:disabled) {
+    background: var(--md-state-primary-08);
+    color: var(--md-sys-color-primary);
+  }
+  &:active:not(:disabled) {
+    background: var(--md-state-primary-12);
+  }
+  &:disabled {
+    color: var(--md-state-disabled-content);
+    cursor: not-allowed;
+  }
+`;
+
+export const Avatar = styled.div`
+  width: 36px;
+  height: 36px;
+  border-radius: var(--md-shape-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  flex: none;
+  & img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`;
+
+export const FilledCard = styled(Card)`
+  /* M3 filled card — lower emphasis, no shadow */
+  background: var(--md-sys-color-surface-container-high);
+  box-shadow: none;
+`;
+
+export const OutlinedCard = styled(Card)`
+  /* M3 outlined card — lowest emphasis */
+  background: var(--md-sys-color-surface-container-lowest);
+  box-shadow: none;
+  border: 1px solid var(--md-sys-color-outline-variant);
+`;
+
+export const Eyebrow = styled.div`
+  /* M3 overline — section label */
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--md-sys-color-on-surface-variant);
+  margin-bottom: 0.6rem;
+`;
+
+export const Mono = styled.span`
+  font-family: "Roboto Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  padding: 0.05rem 0.4rem;
+  border-radius: 6px;
+`;
+
+export const StatValue = styled.div`
+  font-size: 2rem;
+  line-height: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+`;
+
+export const LiveDot = styled.span`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+  background: var(--md-sys-color-primary);
+  animation: pulse 1.8s ease-out infinite;
+`;
+
+const RingWrap = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+`;
+
+const RingBox = styled.div`
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex: none;
+`;
+
+const RingTime = styled.div`
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+`;
+
+const RingLabel = styled.div`
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
+const ringColor = (tone: "primary" | "warning" | "error") =>
+  tone === "error"
+    ? "var(--md-sys-color-error)"
+    : tone === "warning"
+      ? "var(--app-warning)"
+      : "var(--md-sys-color-primary)";
+
+type CountdownRingProps = {
+  remainingMs: number;
+  totalMs: number;
+  timeText: string;
+  label: string;
+  tone?: "primary" | "warning" | "error";
+};
+
+export const CountdownRing = ({
+  remainingMs,
+  totalMs,
+  timeText,
+  label,
+  tone = "primary",
+}: CountdownRingProps) => {
+  const size = 48;
+  const stroke = 4;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const fraction = totalMs > 0 ? Math.min(1, Math.max(0, remainingMs / totalMs)) : 0;
+  const dashOffset = circumference * (1 - fraction);
+
+  return (
+    <RingWrap role="timer">
+      <RingBox>
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="var(--md-sys-color-surface-container-highest)"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={ringColor(tone)}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            style={{ transition: "stroke-dashoffset 0.5s linear" }}
+          />
+        </svg>
+        <RingTime>{timeText}</RingTime>
+      </RingBox>
+      <RingLabel>{label}</RingLabel>
+    </RingWrap>
+  );
+};

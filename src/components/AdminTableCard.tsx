@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { User } from "firebase/auth";
 import { createTable } from "../api";
-import { Card, Hint, Input, PrimaryButton, Row } from "../ui";
+import { Eyebrow, Hint, Icon, Input, OutlinedCard, PrimaryButton, Row } from "../ui";
 
 type Props = {
   user: User;
@@ -15,36 +15,41 @@ export const AdminTableCard = ({ user, onCreated }: Props) => {
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setStatus("Table name is required.");
+      setStatus("Name can't be empty.");
       return;
     }
 
     try {
       const code = await createTable(user, trimmed);
       setName("");
-      setStatus(`Created table ${trimmed} (${code}).`);
+      setStatus(`Added ${trimmed} · ${code}`);
       onCreated(code);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setStatus(`Could not create table: ${message}`);
+      setStatus(`Couldn't add table: ${message}`);
     }
   };
 
   return (
-    <Card>
-      <h2>Admin: add foosball table</h2>
+    <OutlinedCard>
+      <Eyebrow>
+        <Icon size={16} aria-hidden>
+          shield_person
+        </Icon>
+        Admin
+      </Eyebrow>
       <Row>
         <Input
-          placeholder="Table name"
+          placeholder="New table name"
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
         <PrimaryButton type="button" onClick={handleCreate}>
-          Add table
+          <Icon aria-hidden>add</Icon>
+          Add
         </PrimaryButton>
       </Row>
-      <Hint>Codes are generated automatically as 6 characters.</Hint>
       {status && <Hint>{status}</Hint>}
-    </Card>
+    </OutlinedCard>
   );
 };

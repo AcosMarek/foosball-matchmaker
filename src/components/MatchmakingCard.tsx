@@ -1,9 +1,9 @@
 import { useState } from "react";
+import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
 import { joinSession, registerOnTable, startSession } from "../api";
 import { useNow } from "../hooks";
 import {
-  RESET_MINUTES,
   SUPPORTED_PLAYER_COUNTS,
   buildMatchDisposition,
   canStartMatch,
@@ -11,9 +11,21 @@ import {
   matchPhase,
   type MatchSize,
 } from "../matchmaking";
-import { Button, Card, Hint, PrimaryButton, Row } from "../ui";
+import { Button, Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { MatchStatus } from "./MatchStatus";
+
+const sizeLabel = (size: MatchSize): string => (size === 2 ? "1v1" : "2v2");
+
+const TableLine = styled.p`
+  margin: 0 0 0.9rem;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  color: var(--md-sys-color-on-surface);
+  & strong {
+    font-weight: 600;
+  }
+`;
 
 type Props = {
   user: User | null;
@@ -62,12 +74,12 @@ export const MatchmakingCard = ({
       const notified = await startSession(user, selectedTable, size);
       setFeedback(
         notified > 0
-          ? `Started a ${size}-player match. Notified ${notified} other player(s).`
-          : `Started a ${size}-player match. No other registered players to notify yet.`,
+          ? `${sizeLabel(size)} is on — pinged ${notified} player${notified === 1 ? "" : "s"}.`
+          : `${sizeLabel(size)} is on — you're first in.`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setFeedback(`Could not start the match: ${message}`);
+      setFeedback(`Couldn't start: ${message}`);
     }
   };
 
@@ -79,44 +91,48 @@ export const MatchmakingCard = ({
     try {
       await registerOnTable(user, selectedTable);
       await joinSession(user, activeSession.id, selectedTable);
-      setFeedback(`Joined the match started by ${activeSession.startedByName}.`);
+      setFeedback("You're in. Good luck.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setFeedback(`Could not join the match: ${message}`);
+      setFeedback(`Couldn't join: ${message}`);
     }
   };
 
   return (
     <Card>
-      <h2>Matchmaking</h2>
-      <p>Current table: {selectedTableName}</p>
+      <Eyebrow>
+        <Icon size={16} aria-hidden>
+          sports_esports
+        </Icon>
+        Matchmaking
+      </Eyebrow>
+      <TableLine>
+        Playing at <strong>{selectedTableName}</strong>
+      </TableLine>
       <Row>
         {SUPPORTED_PLAYER_COUNTS.map((size) => (
           <PrimaryButton
             key={size}
             type="button"
-            disabled={!user || !selectedTable || liveSession}
+            disabled={!selectedTable || liveSession}
             onClick={() => handleStart(size)}
           >
-            Start {size}-player match
+            <Icon aria-hidden>add</Icon>
+            New {sizeLabel(size)}
           </PrimaryButton>
         ))}
         <Button
           type="button"
-          disabled={!user || !selectedTable || !liveSession || matchFull}
+          disabled={!selectedTable || !liveSession || matchFull}
           onClick={handleJoin}
         >
-          Join active match
+          Jump in
         </Button>
       </Row>
-      <Hint>
-        A match resets if it doesn’t fill within {RESET_MINUTES} minutes, so anyone can start again.
-      </Hint>
       <MatchStatus
         phase={phase}
         liveSession={liveSession}
         matchFull={matchFull}
-        selectedTable={selectedTable}
         activeSession={activeSession}
         sessionPlayers={sessionPlayers}
         targetPlayers={targetPlayers}

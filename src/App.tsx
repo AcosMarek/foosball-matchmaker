@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { isValidTableCode, normalizeTableCode } from "./matchmaking";
-import { GlobalStyles, Header, Subtitle, Title, Wrapper } from "./ui";
+import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
 import {
   useActiveSession,
   useAuth,
@@ -10,7 +10,7 @@ import {
   useTableRegistration,
   useTables,
 } from "./hooks";
-import { AuthCard } from "./components/AuthCard";
+import { AuthBar, SignInPanel } from "./components/AuthCard";
 import { AdminTableCard } from "./components/AdminTableCard";
 import { TableSelector } from "./components/TableSelector";
 import { MatchmakingCard } from "./components/MatchmakingCard";
@@ -77,32 +77,38 @@ export default function App() {
   return (
     <Wrapper>
       <GlobalStyles />
-      <Header>
-        <Title>⚽ Foosball Matchmaker</Title>
-        <Subtitle>Start a match, grab teammates, and see who plays where.</Subtitle>
-      </Header>
+      <TopBar>
+        <Brand>
+          <RodMark />
+          <span>Foosball</span>
+        </Brand>
+        {user && <AuthBar user={user} />}
+      </TopBar>
 
-      <AuthCard user={user} />
+      {!user && <SignInPanel />}
 
       {isAdmin && user && <AdminTableCard user={user} onCreated={setSelectedTable} />}
 
-      <TableSelector
-        user={user}
-        tables={tables}
-        selectedTable={selectedTable}
-        memberCount={tableMemberCount}
-        onSelect={setSelectedTable}
-      />
+      {user && (
+        <>
+          <TableSelector
+            tables={tables}
+            selectedTable={selectedTable}
+            memberCount={tableMemberCount}
+            onSelect={setSelectedTable}
+          />
 
-      <MatchmakingCard
-        user={user}
-        selectedTable={selectedTable}
-        selectedTableName={selectedTableName}
-        activeSession={activeSession}
-        sessionPlayers={sessionPlayers}
-      />
+          <MatchmakingCard
+            user={user}
+            selectedTable={selectedTable}
+            selectedTableName={selectedTableName}
+            activeSession={activeSession}
+            sessionPlayers={sessionPlayers}
+          />
 
-      {selectedTable && <QrCard selectedTable={selectedTable} />}
+          {selectedTable && <QrCard selectedTable={selectedTable} />}
+        </>
+      )}
     </Wrapper>
   );
 }
