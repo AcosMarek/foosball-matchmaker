@@ -1,7 +1,7 @@
 import { useState } from "react";
 import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
-import { joinSession, registerOnTable, startSession } from "../api";
+import { joinSession, notifyMatchReady, registerOnTable, startSession } from "../api";
 import { useNow } from "../hooks";
 import {
   SUPPORTED_PLAYER_COUNTS,
@@ -95,6 +95,23 @@ export const MatchmakingCard = ({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setFeedback(`Couldn't join: ${message}`);
+      return;
+    }
+
+    // Best-effort: if this join filled the match, ping the other participants.
+    // Joining already succeeded, so failures here must not surface as a join error.
+    try {
+      const pinged = await notifyMatchReady(
+        user,
+        activeSession.id,
+        selectedTable,
+        activeSession.targetPlayers,
+      );
+      if (pinged > 0) {
+        setFeedback(`Game on! Pinged ${pinged} player${pinged === 1 ? "" : "s"}.`);
+      }
+    } catch {
+      // Ignore — the "Game on!" ping is best-effort.
     }
   };
 

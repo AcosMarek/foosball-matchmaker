@@ -8,12 +8,18 @@ import {
   limit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { generateTableCode, type MatchSize } from "./matchmaking";
+import {
+  buildMatchDisposition,
+  describeDisposition,
+  generateTableCode,
+  type MatchSize,
+} from "./matchmaking";
 import { toDate } from "./utils";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
@@ -61,6 +67,67 @@ export const notifyTableMembers = async (user: User, tableCode: string): Promise
   );
 
   return others.length;
+};
+
+// When a join fills a match, ping its participants with the final lineup. A one-time
+// transactional claim on the session guarantees the "Game on!" alert is sent exactly
+// once, even if several players fill the match at nearly the same moment. The player who
+// triggered the fill is skipped (they already see the lineup on screen). Best-effort.
+export const notifyMatchReady = async (
+  user: User,
+  sessionId: string,
+  tableCode: string,
+  targetPlayers: MatchSize,
+): Promise<number> => {
+  const snapshot = await getDocs(
+    query(collection(db, "sessionJoins"), where("sessionId", "==", sessionId)),
+  );
+  const players = snapshot.docs
+    .map((joinDoc) => {
+      const data = joinDoc.data();
+      return {
+        uid: String(data.uid || ""),
+        displayName: String(data.displayName || "Player"),
+        joinedAt: toDate(data.joinedAt),
+      };
+    })
+    .sort((a, b) => (a.joinedAt?.getTime() ?? 0) - (b.joinedAt?.getTime() ?? 0));
+
+  const disposition =
+    players.length >= targetPlayers ? buildMatchDisposition(players, targetPlayers) : null;
+  if (!disposition) {
+    return 0;
+  }
+
+  const sessionRef = doc(db, "sessions", sessionId);
+  const claimed = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(sessionRef);
+    if (!snap.exists() || snap.data().readyNotifiedAt) {
+      return false;
+    }
+    tx.update(sessionRef, { readyNotifiedAt: serverTimestamp() });
+    return true;
+  });
+  if (!claimed) {
+    return 0;
+  }
+
+  const lineup = describeDisposition(disposition);
+  const recipients = players.slice(0, targetPlayers).filter((player) => player.uid !== user.uid);
+
+  await Promise.all(
+    recipients.map((player) =>
+      addDoc(collection(db, "notifications"), {
+        toUid: player.uid,
+        tableCode,
+        read: false,
+        createdAt: serverTimestamp(),
+        message: `Game on! ${lineup}`,
+      }),
+    ),
+  );
+
+  return recipients.length;
 };
 
 export const getLatestSessionStart = async (tableCode: string): Promise<Date | null> => {

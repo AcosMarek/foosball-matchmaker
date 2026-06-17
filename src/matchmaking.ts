@@ -112,6 +112,18 @@ export const buildMatchDisposition = (
   };
 };
 
+const describeTeamPlayerText = (teamPlayer: TeamPlayer): string =>
+  teamPlayer.position === "solo"
+    ? teamPlayer.player.displayName
+    : `${teamPlayer.player.displayName} (${teamPlayer.position})`;
+
+// One-line text summary of a match disposition, e.g. "Red: Ada vs Blue: Bo" or
+// "Red: Ada (front), Bo (back) vs Blue: Cy (front), Di (back)". Used for notifications.
+export const describeDisposition = (disposition: MatchDisposition): string =>
+  disposition.teams
+    .map((team) => `${team.color}: ${team.players.map(describeTeamPlayerText).join(", ")}`)
+    .join(" vs ");
+
 export const RESET_MINUTES = 5;
 const RESET_MS = RESET_MINUTES * MS_PER_MINUTE;
 
