@@ -87,8 +87,6 @@ export default function App() {
 
       {!user && <SignInPanel />}
 
-      {isAdmin && user && <AdminTableCard user={user} onCreated={setSelectedTable} />}
-
       {user && (
         <>
           <TableSelector
@@ -109,6 +107,8 @@ export default function App() {
           {selectedTable && <QrCard selectedTable={selectedTable} />}
         </>
       )}
+
+      {isAdmin && user && <AdminTableCard user={user} onCreated={setSelectedTable} />}
     </Wrapper>
   );
 }

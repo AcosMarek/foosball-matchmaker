@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { registerOnTable } from "./api";
-import { canStartMatch } from "./matchmaking";
+import { canStartMatch, MS_PER_MINUTE, RESET_MINUTES } from "./matchmaking";
 import { toDate } from "./utils";
 import type { FoosballTable, JoinedPlayer, Session } from "./types";
 
@@ -169,8 +169,19 @@ export const useIncomingNotifications = (user: User | null): void => {
             continue;
           }
 
-          const message = String(change.doc.data().message || "A foosball match has started.");
-          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          // Skip matches started more than the fill window ago: they've already
+          // reset, so notifying is just stale noise (e.g. when several matches ran
+          // while the browser was closed). Still mark them read to clear the queue.
+          const createdAt = toDate(change.doc.data().createdAt);
+          const isFresh =
+            !!createdAt && Date.now() - createdAt.getTime() < RESET_MINUTES * MS_PER_MINUTE;
+
+          if (
+            isFresh &&
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted"
+          ) {
+            const message = String(change.doc.data().message || "A foosball match has started.");
             new Notification("Foosball Matchmaker", { body: message });
           }
 
