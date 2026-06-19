@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signInWithPopup, signOut, type User } from "firebase/auth";
 import styled from "@emotion/styled";
 import { auth, googleAuthProvider } from "../firebase";
+import { registerForPush } from "../push";
 import { Avatar, Card, Icon, IconButton, PrimaryButton, RodMark } from "../ui";
 
 const notificationsSupported = typeof Notification !== "undefined";
@@ -40,8 +41,20 @@ export const AuthBar = ({ user }: { user: User }) => {
       return;
     }
 
-    setPermission(await Notification.requestPermission());
+    const result = await Notification.requestPermission();
+    setPermission(result);
+    if (result === "granted") {
+      void registerForPush(user);
+    }
   };
+
+  // Returning visitors who already granted permission still need their device token
+  // registered (and refreshed) on load.
+  useEffect(() => {
+    if (notificationsSupported && Notification.permission === "granted") {
+      void registerForPush(user);
+    }
+  }, [user]);
 
   const bellIcon =
     permission === "granted"

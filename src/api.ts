@@ -24,6 +24,23 @@ import { toDate } from "./utils";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
 
+const PUSH_ENDPOINT = import.meta.env.VITE_PUSH_ENDPOINT as string | undefined;
+
+// Fire-and-forget Web Push via the serverless sender. No-op until the endpoint is
+// configured, so local dev without it still works.
+const sendPush = async (user: User, recipients: string[], message: string): Promise<void> => {
+  if (!PUSH_ENDPOINT || recipients.length === 0) {
+    return;
+  }
+
+  const idToken = await user.getIdToken();
+  await fetch(PUSH_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken, recipients, message }),
+  });
+};
+
 export const registerOnTable = async (user: User, tableCode: string): Promise<void> => {
   await setDoc(doc(db, "tableMembers", `${tableCode}_${user.uid}`), {
     tableCode,
@@ -115,16 +132,13 @@ export const notifyMatchReady = async (
   const lineup = describeDisposition(disposition);
   const recipients = players.slice(0, targetPlayers).filter((player) => player.uid !== user.uid);
 
-  await Promise.all(
-    recipients.map((player) =>
-      addDoc(collection(db, "notifications"), {
-        toUid: player.uid,
-        tableCode,
-        read: false,
-        createdAt: serverTimestamp(),
-        message: `Game on! ${lineup}`,
-      }),
-    ),
+  // Delivered via Web Push so recipients are alerted even with the tab closed. No
+  // Firestore notification doc here: that path only fires in an open tab and would
+  // double-notify foreground users.
+  await sendPush(
+    user,
+    recipients.map((player) => player.uid),
+    `Game on! ${lineup}`,
   );
 
   return recipients.length;

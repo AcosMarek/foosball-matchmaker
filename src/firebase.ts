@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging, isSupported, type Messaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,3 +17,16 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
+
+// Cloud Messaging isn't available in every browser (and not in SSR/workers), so we
+// resolve it lazily and tolerate unsupported environments by returning null.
+let messagingPromise: Promise<Messaging | null> | null = null;
+
+export const getMessagingIfSupported = (): Promise<Messaging | null> => {
+  if (!messagingPromise) {
+    messagingPromise = isSupported()
+      .then((supported) => (supported ? getMessaging(app) : null))
+      .catch(() => null);
+  }
+  return messagingPromise;
+};
