@@ -10,7 +10,8 @@ service cloud.firestore {
     }
 
     match /tables/{tableCode} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if isAdmin();
       allow create, update, delete: if isAdmin();
     }
 

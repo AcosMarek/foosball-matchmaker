@@ -21,6 +21,7 @@ import {
   type MatchSize,
 } from "./matchmaking";
 import { toDate } from "./utils";
+import type { FoosballTable } from "./types";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
 
@@ -172,6 +173,15 @@ export const startSession = async (
 
   await joinSession(user, sessionRef.id, tableCode);
   return notifyTableMembers(user, tableCode);
+};
+
+export const getTable = async (code: string): Promise<FoosballTable | null> => {
+  const snapshot = await getDoc(doc(db, "tables", code));
+  if (!snapshot.exists()) {
+    return null;
+  }
+
+  return { code: snapshot.id, name: String(snapshot.data().name || snapshot.id) };
 };
 
 export const createTable = async (user: User, name: string): Promise<string> => {

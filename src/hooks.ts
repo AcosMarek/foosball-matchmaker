@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import {
   collection,
@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { registerOnTable } from "./api";
+import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
 import { canStartMatch, MS_PER_MINUTE, RESET_MINUTES } from "./matchmaking";
 import { toDate } from "./utils";
 import type { FoosballTable, JoinedPlayer, Session } from "./types";
@@ -23,23 +24,21 @@ export const useAuth = (): User | null => {
   return user;
 };
 
-export const useTables = (): FoosballTable[] => {
-  const [tables, setTables] = useState<FoosballTable[]>([]);
+export const useVisitedTables = (): {
+  visited: FoosballTable[];
+  addVisited: (table: FoosballTable) => void;
+} => {
+  const [visited, setVisited] = useState<FoosballTable[]>(() => readVisitedTables());
 
-  useEffect(() => {
-    const q = query(collection(db, "tables"), orderBy("name"));
-
-    return onSnapshot(q, (snapshot) => {
-      setTables(
-        snapshot.docs.map((tableDoc) => ({
-          code: tableDoc.id,
-          name: String(tableDoc.data().name || tableDoc.id),
-        })),
-      );
+  const addVisited = useCallback((table: FoosballTable) => {
+    setVisited((current) => {
+      const next = upsertVisited(current, table);
+      writeVisitedTables(next);
+      return next;
     });
   }, []);
 
-  return tables;
+  return { visited, addVisited };
 };
 
 export const useActiveSession = (selectedTable: string): Session | null => {

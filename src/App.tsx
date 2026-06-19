@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { isValidTableCode, normalizeTableCode } from "./matchmaking";
+import { getTable } from "./api";
 import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
 import {
   useActiveSession,
@@ -8,8 +9,9 @@ import {
   useSessionPlayers,
   useTableMemberCount,
   useTableRegistration,
-  useTables,
+  useVisitedTables,
 } from "./hooks";
+import type { FoosballTable } from "./types";
 import { AuthBar, SignInPanel } from "./components/AuthCard";
 import { AdminTableCard } from "./components/AdminTableCard";
 import { TableSelector } from "./components/TableSelector";
@@ -40,7 +42,7 @@ const initialTable = (): string => tableFromSearch() || storedTable();
 
 export default function App() {
   const user = useAuth();
-  const tables = useTables();
+  const { visited, addVisited } = useVisitedTables();
   const [selectedTable, setSelectedTable] = useState<string>(initialTable);
   const activeSession = useActiveSession(selectedTable);
   const sessionPlayers = useSessionPlayers(user, activeSession?.id ?? null);
@@ -61,6 +63,39 @@ export default function App() {
     }
   }, [selectedTable]);
 
+  // Resolve a table chosen via deep link or restored from a previous visit: look it up
+  // to capture its name and remember it, or clear the selection if the code is unknown.
+  useEffect(() => {
+    if (!selectedTable || visited.some((table) => table.code === selectedTable)) {
+      return;
+    }
+
+    let cancelled = false;
+    getTable(selectedTable)
+      .then((table) => {
+        if (cancelled) {
+          return;
+        }
+        if (table) {
+          addVisited(table);
+        } else {
+          setSelectedTable("");
+        }
+      })
+      .catch(() => {
+        // Leave the selection untouched on transient errors.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTable, visited, addVisited]);
+
+  const handleJoinTable = (table: FoosballTable) => {
+    addVisited(table);
+    setSelectedTable(table.code);
+  };
+
   const adminEmails = useMemo(
     () =>
       (import.meta.env.VITE_ADMIN_EMAILS || "")
@@ -72,7 +107,9 @@ export default function App() {
   const isAdmin = !!user?.email && adminEmails.includes(user.email.toLowerCase());
 
   const selectedTableName =
-    tables.find((table) => table.code === selectedTable)?.name || selectedTable || "No table selected";
+    visited.find((table) => table.code === selectedTable)?.name ||
+    selectedTable ||
+    "No table selected";
 
   return (
     <Wrapper>
@@ -90,10 +127,11 @@ export default function App() {
       {user && (
         <>
           <TableSelector
-            tables={tables}
+            tables={visited}
             selectedTable={selectedTable}
             memberCount={tableMemberCount}
             onSelect={setSelectedTable}
+            onJoin={handleJoinTable}
           />
 
           <MatchmakingCard
