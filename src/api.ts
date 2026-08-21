@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -157,11 +158,12 @@ export const notifyTableMembers = async (
   return others.length;
 };
 
-// Roster for a session, in join order.
+// Roster for a session, in join order. Forced to the server: a player arriving straight
+// from a Slack link has a partly-synced cache holding their own write but not everyone
+// else's, and a short read here costs the announcement its teams.
 const readSessionPlayers = async (sessionId: string) => {
-  const snapshot = await getDocs(
-    query(collection(db, "sessionJoins"), where("sessionId", "==", sessionId)),
-  );
+  const joins = query(collection(db, "sessionJoins"), where("sessionId", "==", sessionId));
+  const snapshot = await getDocsFromServer(joins).catch(() => getDocs(joins));
 
   return snapshot.docs
     .map((joinDoc) => {
