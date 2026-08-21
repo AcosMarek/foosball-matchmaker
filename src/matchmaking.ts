@@ -44,6 +44,30 @@ export const matchSizeLabel = (size: MatchSize): string => (size === 2 ? "1v1" :
 
 export type JoinOutcome = { filled: true } | { filled: false; remaining: number };
 
+export type RosterEntry = MatchPlayer & { joinedAt: Date | null };
+
+// Unions roster sources by uid, in join order. The live listener and a fresh query can
+// each be a step behind the other, so neither is trustworthy alone. A player whose
+// serverTimestamp hasn't resolved yet reads as null and sorts last — they just joined.
+export const mergeRoster = (...sources: RosterEntry[][]): RosterEntry[] => {
+  const byUid = new Map<string, RosterEntry>();
+
+  for (const entry of sources.flat()) {
+    if (!entry.uid) {
+      continue;
+    }
+
+    const existing = byUid.get(entry.uid);
+    if (!existing || (!existing.joinedAt && entry.joinedAt)) {
+      byUid.set(entry.uid, entry);
+    }
+  }
+
+  const order = (entry: RosterEntry) => entry.joinedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+
+  return [...byUid.values()].sort((a, b) => order(a) - order(b));
+};
+
 // Whether a join filled the match. The serialised counter is authoritative and the roster
 // read only decorates the announcement, so whichever is further along decides — a lagging
 // read must never cancel the fill, nor repeat a number an earlier joiner already posted.

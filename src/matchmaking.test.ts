@@ -8,6 +8,7 @@ import {
   isValidTableCode,
   joinOutcome,
   matchPhase,
+  mergeRoster,
   normalizeTableCode,
   scoreWinner,
 } from "./matchmaking";
@@ -151,6 +152,39 @@ describe("join outcome", () => {
 
   it("never reports more spots than the lagging source would suggest", () => {
     expect(joinOutcome(1, 3, 4)).toEqual({ filled: false, remaining: 1 });
+  });
+});
+
+describe("roster merging", () => {
+  const at = (iso: string) => new Date(iso);
+  const alice = { uid: "1", displayName: "Alice", joinedAt: at("2026-01-01T10:00:00Z") };
+  const bob = { uid: "2", displayName: "Bob", joinedAt: at("2026-01-01T10:01:00Z") };
+
+  it("unions sources that each saw only part of the roster", () => {
+    expect(mergeRoster([alice], [bob])).toEqual([alice, bob]);
+  });
+
+  it("does not double count a player both sources saw", () => {
+    expect(mergeRoster([alice, bob], [bob])).toHaveLength(2);
+  });
+
+  // The joiner's own serverTimestamp has not resolved yet, so they arrive with a null.
+  it("puts a player whose timestamp has not resolved last", () => {
+    const pending = { uid: "3", displayName: "Carol", joinedAt: null };
+
+    expect(mergeRoster([bob, alice], [pending]).map((entry) => entry.uid)).toEqual(["1", "2", "3"]);
+  });
+
+  it("prefers the copy that has a resolved timestamp", () => {
+    const pending = { uid: "1", displayName: "Alice", joinedAt: null };
+
+    expect(mergeRoster([pending], [alice])[0].joinedAt).toEqual(alice.joinedAt);
+  });
+
+  it("ignores entries without a uid", () => {
+    expect(mergeRoster([{ uid: "", displayName: "Ghost", joinedAt: null }], [alice])).toEqual([
+      alice,
+    ]);
   });
 });
 

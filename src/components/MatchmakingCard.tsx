@@ -133,6 +133,7 @@ export const MatchmakingCard = ({
         selectedTable,
         activeSession.targetPlayers,
         position,
+        sessionPlayers,
       );
       if (pinged > 0) {
         setFeedback(`Game on! Pinged ${pinged} player${pinged === 1 ? "" : "s"}.`);

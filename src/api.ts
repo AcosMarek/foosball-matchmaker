@@ -23,6 +23,8 @@ import {
   generateTableCode,
   joinOutcome,
   matchSizeLabel,
+  mergeRoster,
+  type RosterEntry,
   type MatchDisposition,
   type MatchScore,
   type MatchSize,
@@ -161,20 +163,23 @@ export const notifyTableMembers = async (
 // Roster for a session, in join order. Forced to the server: a player arriving straight
 // from a Slack link has a partly-synced cache holding their own write but not everyone
 // else's, and a short read here costs the announcement its teams.
-const readSessionPlayers = async (sessionId: string) => {
+const readSessionPlayers = async (sessionId: string): Promise<RosterEntry[]> => {
   const joins = query(collection(db, "sessionJoins"), where("sessionId", "==", sessionId));
-  const snapshot = await getDocsFromServer(joins).catch(() => getDocs(joins));
+  const snapshot = await getDocsFromServer(joins).catch((error) => {
+    console.error("roster read fell back to cache", error);
+    return getDocs(joins);
+  });
 
-  return snapshot.docs
-    .map((joinDoc) => {
+  return mergeRoster(
+    snapshot.docs.map((joinDoc) => {
       const data = joinDoc.data();
       return {
         uid: String(data.uid || ""),
         displayName: String(data.displayName || "Player"),
         joinedAt: toDate(data.joinedAt),
       };
-    })
-    .sort((a, b) => (a.joinedAt?.getTime() ?? 0) - (b.joinedAt?.getTime() ?? 0));
+    }),
+  );
 };
 
 // Every join posts to Slack so the channel can watch a match fill up. The join that fills
@@ -188,13 +193,19 @@ export const notifyJoin = async (
   tableCode: string,
   targetPlayers: MatchSize,
   position: number,
+  knownPlayers: RosterEntry[] = [],
 ): Promise<number> => {
-  let players = await readSessionPlayers(sessionId);
+  // Three sources, unioned: the query can come back short, the listener can lag the join
+  // that just happened, and the joiner themselves is guaranteed to be in the match.
+  const self: RosterEntry = {
+    uid: user.uid,
+    displayName: displayNameOf(user),
+    joinedAt: null,
+  };
+  let players = mergeRoster(await readSessionPlayers(sessionId), knownPlayers, [self]);
 
-  // The counter is authoritative and the roster only decorates the announcement. Re-read
-  // once when it lags so a slow roster can't downgrade the deciding join.
   if (players.length < targetPlayers && position >= targetPlayers) {
-    players = await readSessionPlayers(sessionId);
+    players = mergeRoster(await readSessionPlayers(sessionId), players);
   }
 
   const outcome = joinOutcome(position, players.length, targetPlayers);
