@@ -40,6 +40,25 @@ export const SUPPORTED_PLAYER_COUNTS = [2, 4] as const;
 
 export type MatchSize = (typeof SUPPORTED_PLAYER_COUNTS)[number];
 
+export const matchSizeLabel = (size: MatchSize): string => (size === 2 ? "1v1" : "2v2");
+
+export type JoinOutcome = { filled: true } | { filled: false; remaining: number };
+
+// Whether a join filled the match. The serialised counter is authoritative and the roster
+// read only decorates the announcement, so whichever is further along decides — a lagging
+// read must never cancel the fill, nor repeat a number an earlier joiner already posted.
+export const joinOutcome = (
+  position: number,
+  rosterSize: number,
+  targetPlayers: MatchSize,
+): JoinOutcome => {
+  const joined = Math.max(position, rosterSize);
+
+  return joined >= targetPlayers
+    ? { filled: true }
+    : { filled: false, remaining: targetPlayers - joined };
+};
+
 export type MatchPlayer = {
   uid: string;
   displayName: string;
@@ -123,6 +142,31 @@ export const describeDisposition = (disposition: MatchDisposition): string =>
   disposition.teams
     .map((team) => `${team.color}: ${team.players.map(describeTeamPlayerText).join(", ")}`)
     .join(" vs ");
+
+export type MatchScore = {
+  red: number;
+  blue: number;
+};
+
+export const WINNING_GOALS = 10;
+
+// A game runs to exactly 10: the winner sits on WINNING_GOALS and the loser anywhere
+// below it, so a valid score can never be a draw or an unfinished game.
+export const isValidScore = ({ red, blue }: MatchScore): boolean => {
+  const isLoserScore = (goals: number): boolean =>
+    Number.isInteger(goals) && goals >= 0 && goals < WINNING_GOALS;
+
+  return (
+    (red === WINNING_GOALS && isLoserScore(blue)) || (blue === WINNING_GOALS && isLoserScore(red))
+  );
+};
+
+export const scoreWinner = ({ red, blue }: MatchScore): string => (red > blue ? "Red" : "Blue");
+
+export const describeScore = ({ red, blue }: MatchScore): string => `Red ${red} – Blue ${blue}`;
+
+export const describeResult = (score: MatchScore): string =>
+  `${describeScore(score)} — ${scoreWinner(score)} wins.`;
 
 export const RESET_MINUTES = 5;
 const RESET_MS = RESET_MINUTES * MS_PER_MINUTE;

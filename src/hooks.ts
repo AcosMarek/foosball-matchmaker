@@ -8,6 +8,8 @@ import {
   query,
   updateDoc,
   where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { registerOnTable } from "./api";
@@ -15,6 +17,35 @@ import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedT
 import { canStartMatch, MS_PER_MINUTE, RESET_MINUTES } from "./matchmaking";
 import { toDate } from "./utils";
 import type { FoosballTable, JoinedPlayer, Session } from "./types";
+
+// Sessions written before results shipped have no playerCount/result, so both are
+// defaulted rather than assumed.
+const readSession = (snapshot: QueryDocumentSnapshot<DocumentData>): Session | null => {
+  const data = snapshot.data();
+  const startedAt = toDate(data.startedAt);
+  if (!startedAt) {
+    return null;
+  }
+
+  const result = data.result;
+
+  return {
+    id: snapshot.id,
+    startedAt,
+    startedBy: String(data.startedBy || ""),
+    startedByName: String(data.startedByName || "Unknown"),
+    targetPlayers: data.targetPlayers === 2 ? 2 : 4,
+    playerCount: Number(data.playerCount ?? 0),
+    result: result
+      ? {
+          red: Number(result.red ?? 0),
+          blue: Number(result.blue ?? 0),
+          lineup: String(result.lineup || ""),
+          recordedAt: toDate(result.recordedAt),
+        }
+      : null,
+  };
+};
 
 export const useAuth = (): User | null => {
   const [user, setUser] = useState<User | null>(null);
@@ -64,24 +95,17 @@ export const useActiveSession = (selectedTable: string): Session | null => {
         return;
       }
 
-      const startedAt = toDate(hit.data().startedAt);
-      if (!startedAt) {
+      const session = readSession(hit);
+      if (!session) {
         setActiveSession(null);
         return;
       }
 
-      if (canStartMatch(startedAt).allowed) {
-        setActiveSession(null);
-        return;
-      }
-
-      const rawTarget = hit.data().targetPlayers;
-      setActiveSession({
-        id: hit.id,
-        startedAt,
-        startedByName: String(hit.data().startedByName || "Unknown"),
-        targetPlayers: rawTarget === 2 ? 2 : 4,
-      });
+      // A logged result ends the match, freeing the table for a new game rather than
+      // holding it until the start cooldown lapses.
+      setActiveSession(
+        session.result || canStartMatch(session.startedAt).allowed ? null : session,
+      );
     });
   }, [selectedTable]);
 
@@ -132,6 +156,34 @@ export const useSessionPlayers = (
   }, [user, activeSessionId]);
 
   return sessionPlayers;
+};
+
+const RECENT_SESSIONS = 10;
+
+// Recent matches at the table, newest first. Feeds both the results history and the
+// creator's outstanding-score prompt, so it stays a single listener.
+export const useRecentSessions = (selectedTable: string): Session[] => {
+  const [sessions, setSessions] = useState<Session[]>([]);
+
+  useEffect(() => {
+    if (!selectedTable) {
+      setSessions([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, "sessions"),
+      where("tableCode", "==", selectedTable),
+      orderBy("startedAt", "desc"),
+      limit(RECENT_SESSIONS),
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      setSessions(snapshot.docs.map(readSession).filter((session): session is Session => !!session));
+    });
+  }, [selectedTable]);
+
+  return sessions;
 };
 
 // Counts everyone registered to receive notifications for the selected table,

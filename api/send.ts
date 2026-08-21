@@ -2,6 +2,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
+// The .js extension is required: package.json sets "type": "module", so the compiled
+// function runs as ESM and Node will not resolve an extensionless relative import.
+import { buildSlackPayload, parseRoster, type Roster } from "./_lib/slackMessage.js";
 
 // Deploy target: a free serverless host (e.g. Vercel Hobby). Env vars:
 //   FIREBASE_SERVICE_ACCOUNT  — the service account JSON (required, secret)
@@ -46,27 +49,53 @@ const MAX_MESSAGE_LENGTH = 200;
 const TABLE_CODE_RE = /^[A-Z0-9]{6}$/;
 const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
 
-// Slack mrkdwn only interprets these three characters, so escaping them stops a relayed
-// message from injecting links or markup into the channel.
-const escapeSlack = (text: string): string =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// The allowed origin doubles as the app's public URL, so Slack posts can deep-link
+// straight back into the table that raised them.
+const appUrl = allowedOrigin.startsWith("https://") ? allowedOrigin.replace(/\/+$/, "") : "";
 
 // Per-table webhooks are configured by admins and kept out of client reach in
 // tableIntegrations/{tableCode}; the Admin SDK bypasses the rules that hide them.
-const postToSlack = async (db: Firestore, tableCode: string, text: string): Promise<boolean> => {
+const postToSlack = async (
+  db: Firestore,
+  tableCode: string,
+  event: string,
+  text: string,
+  roster: Roster[],
+): Promise<boolean> => {
   const snapshot = await db.collection("tableIntegrations").doc(tableCode).get();
   const url: unknown = snapshot.get("slackWebhookUrl");
 
   // Pinning the host keeps a mis-set webhook from turning this endpoint into an SSRF proxy.
   if (typeof url !== "string" || !url.startsWith(SLACK_WEBHOOK_PREFIX)) {
+    console.log(`send: no slack webhook configured for ${tableCode}`);
     return false;
   }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: escapeSlack(text) }),
-  });
+  const payload = buildSlackPayload(appUrl, tableCode, event, text, roster);
+  const post = (): Promise<Response> =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+  // Webhooks allow only ~1 message/second, so a burst of joins gets a 429 and would
+  // otherwise be silently dropped. Jitter stops two rate-limited invocations from
+  // retrying in lockstep and colliding a second time.
+  let response = await post();
+  if (response.status === 429) {
+    const retryAfter = Math.min(Number(response.headers.get("retry-after")) || 1, 5);
+    const waitMs = retryAfter * 1000 + Math.random() * 500;
+    console.warn(`send: slack rate limited, retrying in ${Math.round(waitMs)}ms`);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    response = await post();
+  }
+
+  // Slack answers a bad payload with 400 and a reason like "invalid_blocks"; without
+  // this the post just vanishes.
+  if (!response.ok) {
+    console.error(`send: slack rejected ${response.status} ${await response.text()}`);
+  }
 
   return response.ok;
 };
@@ -121,11 +150,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const { idToken, recipients, message, tableCode } = (req.body ?? {}) as {
+  const { idToken, recipients, message, tableCode, event, teams } = (req.body ?? {}) as {
     idToken?: unknown;
     recipients?: unknown;
     message?: unknown;
     tableCode?: unknown;
+    event?: unknown;
+    teams?: unknown;
   };
 
   if (typeof idToken !== "string" || !Array.isArray(recipients) || typeof message !== "string") {
@@ -134,6 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const table = typeof tableCode === "string" && TABLE_CODE_RE.test(tableCode) ? tableCode : "";
+  const kind = typeof event === "string" ? event : "";
+  const roster = parseRoster(teams);
 
   let db: Firestore;
   let messaging: Messaging;
@@ -167,7 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return 0;
     }),
     table
-      ? postToSlack(db, table, body).catch((err) => {
+      ? postToSlack(db, table, kind, body, roster).catch((err) => {
           console.error("send: slack failed", err);
           return false;
         })

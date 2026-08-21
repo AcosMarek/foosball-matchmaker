@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildMatchDisposition,
   canStartMatch,
+  describeScore,
   fillWindowRemaining,
+  isValidScore,
   isValidTableCode,
+  joinOutcome,
   matchPhase,
   normalizeTableCode,
+  scoreWinner,
 } from "./matchmaking";
 
 describe("table code handling", () => {
@@ -15,6 +19,35 @@ describe("table code handling", () => {
     expect(isValidTableCode("abc12")).toBe(false);
     expect(isValidTableCode("abc1234")).toBe(false);
     expect(isValidTableCode("abc-12")).toBe(false);
+  });
+});
+
+describe("match scores", () => {
+  it("accepts a finished game with the winner on ten", () => {
+    expect(isValidScore({ red: 10, blue: 0 })).toBe(true);
+    expect(isValidScore({ red: 10, blue: 9 })).toBe(true);
+    expect(isValidScore({ red: 4, blue: 10 })).toBe(true);
+  });
+
+  it("rejects unfinished games, ties and scores past ten", () => {
+    expect(isValidScore({ red: 9, blue: 7 })).toBe(false);
+    expect(isValidScore({ red: 10, blue: 10 })).toBe(false);
+    expect(isValidScore({ red: 11, blue: 3 })).toBe(false);
+  });
+
+  it("rejects blanks, negatives and fractions", () => {
+    expect(isValidScore({ red: Number.NaN, blue: 10 })).toBe(false);
+    expect(isValidScore({ red: -1, blue: 10 })).toBe(false);
+    expect(isValidScore({ red: 10, blue: 1.5 })).toBe(false);
+  });
+
+  it("names the winner", () => {
+    expect(scoreWinner({ red: 10, blue: 7 })).toBe("Red");
+    expect(scoreWinner({ red: 7, blue: 10 })).toBe("Blue");
+  });
+
+  it("formats a score line", () => {
+    expect(describeScore({ red: 10, blue: 7 })).toBe("Red 10 – Blue 7");
   });
 });
 
@@ -92,6 +125,32 @@ describe("match disposition", () => {
     const disposition = buildMatchDisposition([...players, { uid: "5", displayName: "Eve" }], 4);
 
     expect(disposition?.teams[1].players[1].player.displayName).toBe("Dave");
+  });
+});
+
+describe("join outcome", () => {
+  it("counts down the remaining spots while filling", () => {
+    expect(joinOutcome(2, 2, 4)).toEqual({ filled: false, remaining: 2 });
+    expect(joinOutcome(3, 3, 4)).toEqual({ filled: false, remaining: 1 });
+  });
+
+  it("fills on the deciding join", () => {
+    expect(joinOutcome(4, 4, 4)).toEqual({ filled: true });
+    expect(joinOutcome(2, 2, 2)).toEqual({ filled: true });
+  });
+
+  // A lagging roster read once cancelled the fill and posted "0 spots left" instead.
+  it("fills on the counter even when the roster read lags behind", () => {
+    expect(joinOutcome(4, 2, 4)).toEqual({ filled: true });
+    expect(joinOutcome(2, 0, 2)).toEqual({ filled: true });
+  });
+
+  it("fills on the roster even when the counter lags behind", () => {
+    expect(joinOutcome(1, 4, 4)).toEqual({ filled: true });
+  });
+
+  it("never reports more spots than the lagging source would suggest", () => {
+    expect(joinOutcome(1, 3, 4)).toEqual({ filled: false, remaining: 1 });
   });
 });
 

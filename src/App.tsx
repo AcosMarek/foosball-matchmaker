@@ -6,6 +6,7 @@ import {
   useActiveSession,
   useAuth,
   useIncomingNotifications,
+  useRecentSessions,
   useSessionPlayers,
   useTableMemberCount,
   useTableRegistration,
@@ -16,6 +17,8 @@ import { AuthBar, SignInPanel } from "./components/AuthCard";
 import { AdminTableCard } from "./components/AdminTableCard";
 import { TableSelector } from "./components/TableSelector";
 import { MatchmakingCard } from "./components/MatchmakingCard";
+import { MatchHistoryCard } from "./components/MatchHistoryCard";
+import { RecordResultCard } from "./components/RecordResultCard";
 import { QrCard } from "./components/QrCard";
 
 const STORAGE_KEY = "foosball:selectedTable";
@@ -47,6 +50,7 @@ export default function App() {
   const activeSession = useActiveSession(selectedTable);
   const sessionPlayers = useSessionPlayers(user, activeSession?.id ?? null);
   const tableMemberCount = useTableMemberCount(user, selectedTable);
+  const recentSessions = useRecentSessions(selectedTable);
   useIncomingNotifications(user);
   useTableRegistration(user, selectedTable);
 
@@ -106,6 +110,19 @@ export default function App() {
   );
   const isAdmin = !!user?.email && adminEmails.includes(user.email.toLowerCase());
 
+  // A match the signed-in user started, played out, and hasn't scored yet. It outlives the
+  // normal session lifecycle so the creator can still log it once the cooldown lapses.
+  const pendingResult = useMemo(
+    () =>
+      recentSessions.find(
+        (session) =>
+          session.startedBy === user?.uid &&
+          !session.result &&
+          session.playerCount >= session.targetPlayers,
+      ) ?? null,
+    [recentSessions, user],
+  );
+
   const selectedTableName =
     visited.find((table) => table.code === selectedTable)?.name ||
     selectedTable ||
@@ -141,6 +158,12 @@ export default function App() {
             activeSession={activeSession}
             sessionPlayers={sessionPlayers}
           />
+
+          {pendingResult && (
+            <RecordResultCard user={user} session={pendingResult} tableCode={selectedTable} />
+          )}
+
+          {selectedTable && <MatchHistoryCard sessions={recentSessions} />}
 
           {selectedTable && <QrCard selectedTable={selectedTable} />}
         </>

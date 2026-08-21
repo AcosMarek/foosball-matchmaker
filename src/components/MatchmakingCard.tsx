@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
-import { joinSession, notifyMatchReady, registerOnTable, startSession } from "../api";
+import {
+  joinSession,
+  notifyJoin,
+  notifyMatchExpired,
+  registerOnTable,
+  startSession,
+} from "../api";
 import { useNow } from "../hooks";
 import {
   SUPPORTED_PLAYER_COUNTS,
@@ -9,13 +15,12 @@ import {
   canStartMatch,
   fillWindowRemaining,
   matchPhase,
+  matchSizeLabel,
   type MatchSize,
 } from "../matchmaking";
 import { Button, Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { MatchStatus } from "./MatchStatus";
-
-const sizeLabel = (size: MatchSize): string => (size === 2 ? "1v1" : "2v2");
 
 const TableLine = styled.p`
   margin: 0 0 0.9rem;
@@ -63,6 +68,26 @@ export const MatchmakingCard = ({
     ? canStartMatch(activeSession.startedAt, new Date(now)).waitMs
     : 0;
 
+  // Only clients with the table open can notice the window lapse, so whoever sees it
+  // first announces and the claim collapses the rest.
+  const expiryAnnounced = useRef("");
+  useEffect(() => {
+    if (!user || !activeSession || !selectedTable || phase !== "expired") {
+      return;
+    }
+    if (expiryAnnounced.current === activeSession.id) {
+      return;
+    }
+
+    expiryAnnounced.current = activeSession.id;
+    void notifyMatchExpired(
+      user,
+      activeSession.id,
+      selectedTable,
+      activeSession.targetPlayers,
+    ).catch((error) => console.error("notifyMatchExpired failed", error));
+  }, [user, activeSession, selectedTable, phase]);
+
   const handleStart = async (size: MatchSize) => {
     if (!user || !selectedTable) {
       return;
@@ -74,8 +99,8 @@ export const MatchmakingCard = ({
       const notified = await startSession(user, selectedTable, size);
       setFeedback(
         notified > 0
-          ? `${sizeLabel(size)} is on — pinged ${notified} player${notified === 1 ? "" : "s"}.`
-          : `${sizeLabel(size)} is on — you're first in.`,
+          ? `${matchSizeLabel(size)} is on — pinged ${notified} player${notified === 1 ? "" : "s"}.`
+          : `${matchSizeLabel(size)} is on — you're first in.`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -88,9 +113,10 @@ export const MatchmakingCard = ({
       return;
     }
 
+    let position = 0;
     try {
       await registerOnTable(user, selectedTable);
-      await joinSession(user, activeSession.id, selectedTable);
+      position = await joinSession(user, activeSession.id, selectedTable);
       setFeedback("You're in. Good luck.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -101,17 +127,20 @@ export const MatchmakingCard = ({
     // Best-effort: if this join filled the match, ping the other participants.
     // Joining already succeeded, so failures here must not surface as a join error.
     try {
-      const pinged = await notifyMatchReady(
+      const pinged = await notifyJoin(
         user,
         activeSession.id,
         selectedTable,
         activeSession.targetPlayers,
+        position,
       );
       if (pinged > 0) {
         setFeedback(`Game on! Pinged ${pinged} player${pinged === 1 ? "" : "s"}.`);
       }
-    } catch {
-      // Ignore — the "Game on!" ping is best-effort.
+    } catch (error) {
+      // Swallowing this silently once cost three matches their announcement with no trace.
+      console.error("notifyJoin failed", error);
+      setFeedback("You're in, but the alert couldn't be posted.");
     }
   };
 
@@ -135,7 +164,7 @@ export const MatchmakingCard = ({
             onClick={() => handleStart(size)}
           >
             <Icon aria-hidden>add</Icon>
-            New {sizeLabel(size)}
+            New {matchSizeLabel(size)}
           </PrimaryButton>
         ))}
         <Button
