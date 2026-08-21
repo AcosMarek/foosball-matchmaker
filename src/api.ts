@@ -27,10 +27,22 @@ const displayNameOf = (user: User): string => user.displayName || user.email || 
 
 const PUSH_ENDPOINT = import.meta.env.VITE_PUSH_ENDPOINT as string | undefined;
 
-// Fire-and-forget Web Push via the serverless sender. No-op until the endpoint is
-// configured, so local dev without it still works.
-const sendPush = async (user: User, recipients: string[], message: string): Promise<void> => {
-  if (!PUSH_ENDPOINT || recipients.length === 0) {
+export const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
+
+type NotifyPayload = {
+  message: string;
+  recipients?: string[];
+  tableCode?: string;
+};
+
+// Fire-and-forget fan-out via the serverless sender: Web Push to the listed users, plus a
+// Slack post when the table has a webhook configured. No-op until the endpoint is set, so
+// local dev without it still works.
+const sendNotification = async (
+  user: User,
+  { recipients = [], message, tableCode = "" }: NotifyPayload,
+): Promise<void> => {
+  if (!PUSH_ENDPOINT || (recipients.length === 0 && !tableCode)) {
     return;
   }
 
@@ -38,7 +50,7 @@ const sendPush = async (user: User, recipients: string[], message: string): Prom
   await fetch(PUSH_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken, recipients, message }),
+    body: JSON.stringify({ idToken, recipients, message, tableCode }),
   });
 };
 
@@ -71,6 +83,7 @@ export const notifyTableMembers = async (user: User, tableCode: string): Promise
     query(collection(db, "tableMembers"), where("tableCode", "==", tableCode)),
   );
   const others = snapshot.docs.filter((member) => member.data().uid !== user.uid);
+  const message = `${user.displayName || "A player"} started matchmaking on ${tableCode}.`;
 
   await Promise.all(
     others.map((member) =>
@@ -79,10 +92,14 @@ export const notifyTableMembers = async (user: User, tableCode: string): Promise
         tableCode,
         read: false,
         createdAt: serverTimestamp(),
-        message: `${user.displayName || "A player"} started matchmaking on ${tableCode}.`,
+        message,
       }),
     ),
   );
+
+  // Slack only: members are already covered by the notification docs above, and pushing
+  // here too would double-notify them. Best-effort, so a relay outage can't block a start.
+  await sendNotification(user, { message, tableCode }).catch(() => {});
 
   return others.length;
 };
@@ -136,11 +153,11 @@ export const notifyMatchReady = async (
   // Delivered via Web Push so recipients are alerted even with the tab closed. No
   // Firestore notification doc here: that path only fires in an open tab and would
   // double-notify foreground users.
-  await sendPush(
-    user,
-    recipients.map((player) => player.uid),
-    `Game on! ${lineup}`,
-  );
+  await sendNotification(user, {
+    message: `Game on! ${lineup}`,
+    recipients: recipients.map((player) => player.uid),
+    tableCode,
+  });
 
   return recipients.length;
 };
@@ -201,4 +218,31 @@ export const createTable = async (user: User, name: string): Promise<string> => 
   });
 
   return code;
+};
+
+export const isSlackWebhookUrl = (url: string): boolean => url.startsWith(SLACK_WEBHOOK_PREFIX);
+
+// Admin-only: these live in tableIntegrations so the world-readable table doc never
+// carries the webhook secret. Rules reject both calls for everyone else.
+export const getTableSlackWebhook = async (tableCode: string): Promise<string> => {
+  const snapshot = await getDoc(doc(db, "tableIntegrations", tableCode));
+
+  return snapshot.exists() ? String(snapshot.data().slackWebhookUrl || "") : "";
+};
+
+export const setTableSlackWebhook = async (
+  user: User,
+  tableCode: string,
+  webhookUrl: string,
+): Promise<void> => {
+  await setDoc(
+    doc(db, "tableIntegrations", tableCode),
+    {
+      tableCode,
+      slackWebhookUrl: webhookUrl,
+      updatedBy: user.uid,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 };

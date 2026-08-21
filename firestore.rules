@@ -15,6 +15,13 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    match /tableIntegrations/{tableCode} {
+      // Slack webhook URLs are secrets, so they live here instead of on the
+      // world-readable table doc. The sender reads them with the Admin SDK,
+      // which bypasses these rules.
+      allow read, write: if isAdmin();
+    }
+
     match /tableMembers/{memberId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && request.resource.data.uid == request.auth.uid;

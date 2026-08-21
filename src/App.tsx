@@ -146,7 +146,14 @@ export default function App() {
         </>
       )}
 
-      {isAdmin && user && <AdminTableCard user={user} onCreated={setSelectedTable} />}
+      {isAdmin && user && (
+        <AdminTableCard
+          user={user}
+          selectedTable={selectedTable}
+          selectedTableName={selectedTableName}
+          onCreated={setSelectedTable}
+        />
+      )}
     </Wrapper>
   );
 }

@@ -43,6 +43,69 @@ const isValidIdToken = async (idToken: string): Promise<boolean> => {
 
 const MAX_RECIPIENTS = 8;
 const MAX_MESSAGE_LENGTH = 200;
+const TABLE_CODE_RE = /^[A-Z0-9]{6}$/;
+const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
+
+// Slack mrkdwn only interprets these three characters, so escaping them stops a relayed
+// message from injecting links or markup into the channel.
+const escapeSlack = (text: string): string =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Per-table webhooks are configured by admins and kept out of client reach in
+// tableIntegrations/{tableCode}; the Admin SDK bypasses the rules that hide them.
+const postToSlack = async (db: Firestore, tableCode: string, text: string): Promise<boolean> => {
+  const snapshot = await db.collection("tableIntegrations").doc(tableCode).get();
+  const url: unknown = snapshot.get("slackWebhookUrl");
+
+  // Pinning the host keeps a mis-set webhook from turning this endpoint into an SSRF proxy.
+  if (typeof url !== "string" || !url.startsWith(SLACK_WEBHOOK_PREFIX)) {
+    return false;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: escapeSlack(text) }),
+  });
+
+  return response.ok;
+};
+
+const pushToUsers = async (
+  db: Firestore,
+  messaging: Messaging,
+  uids: string[],
+  body: string,
+): Promise<number> => {
+  if (uids.length === 0) {
+    return 0;
+  }
+
+  const snapshot = await db.collection("pushTokens").where("uid", "in", uids).get();
+  const tokens = snapshot.docs
+    .map((document): unknown => document.get("token"))
+    .filter((token): token is string => typeof token === "string");
+
+  console.log(`send: ${uids.length} recipient(s), ${tokens.length} token(s)`);
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    data: { title: "Foosball Matchmaker", body },
+  });
+
+  console.log(`send: delivered ${response.successCount}/${tokens.length}`);
+  if (response.failureCount > 0) {
+    console.error(
+      "send: failures",
+      response.responses.map((r, i) => (r.success ? null : `${i}:${r.error?.code}`)).filter(Boolean),
+    );
+  }
+
+  return response.successCount;
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
@@ -58,16 +121,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const { idToken, recipients, message } = (req.body ?? {}) as {
+  const { idToken, recipients, message, tableCode } = (req.body ?? {}) as {
     idToken?: unknown;
     recipients?: unknown;
     message?: unknown;
+    tableCode?: unknown;
   };
 
   if (typeof idToken !== "string" || !Array.isArray(recipients) || typeof message !== "string") {
     res.status(400).json({ error: "Invalid payload" });
     return;
   }
+
+  const table = typeof tableCode === "string" && TABLE_CODE_RE.test(tableCode) ? tableCode : "";
 
   let db: Firestore;
   let messaging: Messaging;
@@ -93,38 +159,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     .filter((uid): uid is string => typeof uid === "string")
     .slice(0, MAX_RECIPIENTS);
   const body = message.slice(0, MAX_MESSAGE_LENGTH);
-  if (uids.length === 0) {
-    res.status(200).json({ sent: 0 });
-    return;
-  }
 
-  try {
-    const snapshot = await db.collection("pushTokens").where("uid", "in", uids).get();
-    const tokens = snapshot.docs
-      .map((document): unknown => document.get("token"))
-      .filter((token): token is string => typeof token === "string");
+  // The two channels are independent: neither failing may suppress the other.
+  const [sent, slack] = await Promise.all([
+    pushToUsers(db, messaging, uids, body).catch((err) => {
+      console.error("send: push failed", err);
+      return 0;
+    }),
+    table
+      ? postToSlack(db, table, body).catch((err) => {
+          console.error("send: slack failed", err);
+          return false;
+        })
+      : Promise.resolve(false),
+  ]);
 
-    console.log(`send: ${uids.length} recipient(s), ${tokens.length} token(s)`);
-    if (tokens.length === 0) {
-      res.status(200).json({ sent: 0 });
-      return;
-    }
-
-    const response = await messaging.sendEachForMulticast({
-      tokens,
-      data: { title: "Foosball Matchmaker", body },
-    });
-
-    console.log(`send: delivered ${response.successCount}/${tokens.length}`);
-    if (response.failureCount > 0) {
-      console.error(
-        "send: failures",
-        response.responses.map((r, i) => (r.success ? null : `${i}:${r.error?.code}`)).filter(Boolean),
-      );
-    }
-    res.status(200).json({ sent: response.successCount });
-  } catch (err) {
-    console.error("send: failed", err);
-    res.status(500).json({ error: "Send failed" });
-  }
+  res.status(200).json({ sent, slack });
 }
