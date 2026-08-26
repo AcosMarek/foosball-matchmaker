@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { registerOnTable } from "./api";
+import { registerForPush } from "./push";
 import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
 import { canStartMatch, MS_PER_MINUTE, RESET_MINUTES } from "./matchmaking";
 import { toDate } from "./utils";
@@ -243,6 +244,86 @@ export const useIncomingNotifications = (user: User | null): void => {
       void handleChanges().catch(() => {});
     });
   }, [user]);
+};
+
+const NOTIFICATION_PROMPT_KEY = "foosball:notificationPromptOff";
+
+export type NotificationState = NotificationPermission | "unsupported";
+
+const notificationsSupported = (): boolean => typeof Notification !== "undefined";
+
+const promptSilenced = (): boolean => {
+  try {
+    return localStorage.getItem(NOTIFICATION_PROMPT_KEY) === "1";
+  } catch {
+    // Ignore storage being unavailable (e.g. private browsing).
+    return false;
+  }
+};
+
+// Notification permission plus the sign-in prompt shown to users who haven't decided
+// yet. "Don't remind me" is persisted; dismissing lasts until the next sign-in.
+export const useNotifications = (
+  user: User | null,
+): {
+  permission: NotificationState;
+  promptOpen: boolean;
+  requestPermission: () => void;
+  dismissPrompt: () => void;
+  silencePrompt: () => void;
+} => {
+  const [permission, setPermission] = useState<NotificationState>(() =>
+    notificationsSupported() ? Notification.permission : "unsupported",
+  );
+  const [dismissed, setDismissed] = useState(true);
+  const uid = user?.uid ?? null;
+
+  // Re-arm the prompt on every sign-in unless it was silenced for good.
+  useEffect(() => {
+    setDismissed(!uid || promptSilenced());
+  }, [uid]);
+
+  // Returning visitors who already granted permission still need their device token
+  // registered (and refreshed) on load, as does anyone who just granted it.
+  useEffect(() => {
+    if (!user || permission !== "granted") {
+      return;
+    }
+
+    void registerForPush(user).catch((error) =>
+      console.error("Push registration failed", error),
+    );
+  }, [user, permission]);
+
+  const requestPermission = useCallback(() => {
+    if (!notificationsSupported()) {
+      return;
+    }
+
+    void Notification.requestPermission()
+      .then(setPermission)
+      .catch((error) => console.error("Notification permission request failed", error));
+  }, []);
+
+  const dismissPrompt = useCallback(() => setDismissed(true), []);
+
+  const silencePrompt = useCallback(() => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(NOTIFICATION_PROMPT_KEY, "1");
+    } catch {
+      // Ignore storage being unavailable (e.g. private browsing).
+    }
+  }, []);
+
+  return {
+    // Only "default" is actionable: a blocked permission can't be re-requested from script.
+    promptOpen: !!user && permission === "default" && !dismissed,
+    permission,
+    requestPermission,
+    dismissPrompt,
+    silencePrompt,
+  };
 };
 
 export const useNow = (active: boolean): number => {

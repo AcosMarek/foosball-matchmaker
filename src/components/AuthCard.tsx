@@ -1,13 +1,8 @@
-import { useEffect, useState } from "react";
 import { signInWithPopup, signOut, type User } from "firebase/auth";
 import styled from "@emotion/styled";
 import { auth, googleAuthProvider } from "../firebase";
-import { registerForPush } from "../push";
+import type { NotificationState } from "../hooks";
 import { Avatar, Card, Icon, IconButton, PrimaryButton, RodMark } from "../ui";
-
-const notificationsSupported = typeof Notification !== "undefined";
-
-type NotificationState = NotificationPermission | "unsupported";
 
 const Identity = styled.div`
   display: inline-flex;
@@ -31,31 +26,15 @@ const Name = styled.span`
 const initialOf = (user: User): string =>
   (user.displayName || user.email || "?").trim().charAt(0).toUpperCase();
 
-export const AuthBar = ({ user }: { user: User }) => {
-  const [permission, setPermission] = useState<NotificationState>(
-    notificationsSupported ? Notification.permission : "unsupported",
-  );
-
-  const requestNotifications = async () => {
-    if (!notificationsSupported) {
-      return;
-    }
-
-    const result = await Notification.requestPermission();
-    setPermission(result);
-    if (result === "granted") {
-      void registerForPush(user);
-    }
-  };
-
-  // Returning visitors who already granted permission still need their device token
-  // registered (and refreshed) on load.
-  useEffect(() => {
-    if (notificationsSupported && Notification.permission === "granted") {
-      void registerForPush(user);
-    }
-  }, [user]);
-
+export const AuthBar = ({
+  user,
+  permission,
+  onRequestNotifications,
+}: {
+  user: User;
+  permission: NotificationState;
+  onRequestNotifications: () => void;
+}) => {
   const bellIcon =
     permission === "granted"
       ? "notifications_active"
@@ -78,7 +57,7 @@ export const AuthBar = ({ user }: { user: User }) => {
         title={bellLabel}
         aria-label={bellLabel}
         disabled={permission !== "default"}
-        onClick={requestNotifications}
+        onClick={onRequestNotifications}
       >
         <Icon fill={permission === "granted" ? 1 : 0} aria-hidden>
           {bellIcon}

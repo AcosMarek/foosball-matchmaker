@@ -42,6 +42,26 @@ VITE_ADMIN_EMAILS=admin@example.com
 VITE_QR_SERVICE_URL=https://api.qrserver.com/v1/create-qr-code/
 ```
 
+## Slack `/foos` command
+
+`api/slack.ts` answers the slash command with a private (ephemeral) message containing a
+**Start a game** button; clicking it opens the app in the browser. `/foos ABC123` deep-links
+straight into that table, `/foos` on its own opens the app with the last table remembered
+on that device.
+
+1. Create a Slack app at <https://api.slack.com/apps> → **From scratch**.
+2. **Slash Commands** → **Create New Command**:
+   - Command: `/foos`
+   - Request URL: `https://<your-deployment>/api/slack`
+   - Usage hint: `[table code]`
+3. Install the app to the workspace.
+4. Set the serverless env vars (Vercel → Settings → Environment Variables):
+   - `SLACK_SIGNING_SECRET` — from the app's **Basic Information** page
+   - `ALLOWED_ORIGIN` — the app's public URL, e.g. `https://foosball-matchmaker.web.app`
+
+Requests are rejected unless they carry a valid Slack HMAC-SHA256 signature that is less
+than five minutes old.
+
 ## Firestore collections used
 
 - `tables`

@@ -6,6 +6,7 @@ import {
   useActiveSession,
   useAuth,
   useIncomingNotifications,
+  useNotifications,
   useRecentSessions,
   useSessionPlayers,
   useTableMemberCount,
@@ -15,6 +16,7 @@ import {
 import type { FoosballTable } from "./types";
 import { AuthBar, SignInPanel } from "./components/AuthCard";
 import { AdminTableCard } from "./components/AdminTableCard";
+import { NotificationPrompt } from "./components/NotificationPrompt";
 import { TableSelector } from "./components/TableSelector";
 import { MatchmakingCard } from "./components/MatchmakingCard";
 import { MatchHistoryCard } from "./components/MatchHistoryCard";
@@ -51,6 +53,7 @@ export default function App() {
   const sessionPlayers = useSessionPlayers(user, activeSession?.id ?? null);
   const tableMemberCount = useTableMemberCount(user, selectedTable);
   const recentSessions = useRecentSessions(selectedTable);
+  const notifications = useNotifications(user);
   useIncomingNotifications(user);
   useTableRegistration(user, selectedTable);
 
@@ -136,8 +139,22 @@ export default function App() {
           <RodMark />
           <span>Foosball</span>
         </Brand>
-        {user && <AuthBar user={user} />}
+        {user && (
+          <AuthBar
+            user={user}
+            permission={notifications.permission}
+            onRequestNotifications={notifications.requestPermission}
+          />
+        )}
       </TopBar>
+
+      {notifications.promptOpen && (
+        <NotificationPrompt
+          onActivate={notifications.requestPermission}
+          onDismiss={notifications.dismissPrompt}
+          onSilence={notifications.silencePrompt}
+        />
+      )}
 
       {!user && <SignInPanel />}
 
