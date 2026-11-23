@@ -22,7 +22,7 @@ import { MatchmakingCard } from "./components/MatchmakingCard";
 import { MatchHistoryCard } from "./components/MatchHistoryCard";
 import { LeaderboardCard } from "./components/LeaderboardCard";
 import { StatsDialog } from "./components/StatsDialog";
-import { tableStandings } from "./ratings";
+import { matchesFor, tableStandings } from "./ratings";
 import { RecordResultCard } from "./components/RecordResultCard";
 import { QrCard } from "./components/QrCard";
 
@@ -172,6 +172,8 @@ export default function App() {
           place={standings?.find((entry) => entry.player.uid === user.uid)?.place ?? null}
           placedCount={standings?.filter((entry) => entry.place !== null).length ?? 0}
           tableName={selectedTableName}
+          matches={stats ? matchesFor(stats, { uid: user.uid }) : []}
+          tableLabel={(code) => visited.find((table) => table.code === code)?.name || code}
           onClose={() => setStatsOpen(false)}
         />
       )}
@@ -210,7 +212,12 @@ export default function App() {
           )}
 
           {selectedTable && (
-            <MatchHistoryCard sessions={recentSessions} stats={stats} currentUid={user.uid} />
+            <MatchHistoryCard
+              tableCode={selectedTable}
+              sessions={recentSessions}
+              stats={stats}
+              currentUid={user.uid}
+            />
           )}
 
           {selectedTable && <QrCard selectedTable={selectedTable} />}

@@ -9,10 +9,12 @@ import {
   ratingChangeSince,
   toughestOpponent,
   winRate,
+  type MatchRating,
   type PlayerStats,
   type Versus,
 } from "../ratings";
-import { Delta, Dialog, Eyebrow, Hint, Icon, IconButton } from "../ui";
+import { Delta, Dialog, Eyebrow, Hint, Icon, IconButton, thinScrollbar } from "../ui";
+import { RatedMatchList } from "./RatedMatchList";
 
 const Head = styled.div`
   display: flex;
@@ -79,6 +81,50 @@ const Form = styled.span<{ won: boolean }>`
   color: ${(props) => (props.won ? "var(--md-sys-color-primary)" : "var(--md-sys-color-error)")};
 `;
 
+// The dialog is as tall as the screen allows and laid out as a column, so the figures stay
+// put and only the match list below them scrolls.
+const Sheet = styled(Dialog)`
+  max-height: calc(100dvh - 2rem);
+  /* Only reached on a screen too short for the figures plus a few matches */
+  overflow-y: auto;
+  ${thinScrollbar}
+  &[open] {
+    display: flex;
+    flex-direction: column;
+  }
+`;
+
+const History = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  /* Room for one match, so the list can't be squeezed out of sight */
+  min-height: 6.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  /* The dialog already sits on the tone match entries normally use */
+  --match-entry-bg: var(--md-sys-color-surface-container-lowest);
+`;
+
+const HistoryScroll = styled.div`
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Keeps the scroll bar clear of the entries without narrowing them */
+  margin-right: -0.75rem;
+  padding-right: 0.75rem;
+  ${thinScrollbar}
+`;
+
+const HistoryLabel = styled.div`
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
+const HISTORY_PAGE = 5;
 const TREND_WIDTH = 280;
 const TREND_HEIGHT = 48;
 const TREND_PAD = 4;
@@ -106,7 +152,9 @@ const Trend = ({ player }: { player: PlayerStats }) => {
       height={TREND_HEIGHT}
       role="img"
       aria-label={`Rating over ${player.games} games, from ${START_RATING} to ${player.rating}`}
-      style={{ display: "block", marginBottom: "0.5rem" }}
+      // flexShrink: the dialog is a column that gives height to the match list, and an SVG
+      // would otherwise be the first thing squeezed.
+      style={{ display: "block", marginBottom: "0.5rem", flexShrink: 0 }}
     >
       <polyline
         points={points}
@@ -133,10 +181,21 @@ type Props = {
   place: number | null;
   placedCount: number;
   tableName: string;
+  // This player's rated matches on every table, newest first.
+  matches: MatchRating[];
+  tableLabel: (tableCode: string) => string;
   onClose: () => void;
 };
 
-export const StatsDialog = ({ player, place, placedCount, tableName, onClose }: Props) => {
+export const StatsDialog = ({
+  player,
+  place,
+  placedCount,
+  tableName,
+  matches,
+  tableLabel,
+  onClose,
+}: Props) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -148,7 +207,7 @@ export const StatsDialog = ({ player, place, placedCount, tableName, onClose }: 
   const gamesToRank = player ? PROVISIONAL_GAMES - player.games : 0;
 
   return (
-    <Dialog
+    <Sheet
       ref={dialogRef}
       aria-labelledby="stats-title"
       onCancel={(event) => {
@@ -210,7 +269,7 @@ export const StatsDialog = ({ player, place, placedCount, tableName, onClose }: 
                 </MetricValue>
               ) : place === null ? (
                 <MetricValue>
-                  –<MetricNote>no games here</MetricNote>
+                  –<MetricNote>not on this board</MetricNote>
                 </MetricValue>
               ) : (
                 <MetricValue>
@@ -268,8 +327,20 @@ export const StatsDialog = ({ player, place, placedCount, tableName, onClose }: 
               ))}
             </span>
           </Line>
+
+          <History>
+            <HistoryLabel>Your matches</HistoryLabel>
+            <HistoryScroll>
+              <RatedMatchList
+                matches={matches}
+                currentUid={player.uid}
+                tableLabel={tableLabel}
+                pageSize={HISTORY_PAGE}
+              />
+            </HistoryScroll>
+          </History>
         </>
       )}
-    </Dialog>
+    </Sheet>
   );
 };

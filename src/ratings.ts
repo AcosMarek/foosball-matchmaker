@@ -60,12 +60,11 @@ export type PlayerStats = {
   rank: number | null;
 };
 
-// What a single match did to the ratings: everyone's rating going in, and the points the
-// Red and Blue sides gained or lost (always equal and opposite).
-export type MatchRating = {
+// A scored match together with what it did to the ratings: everyone's rating going in,
+// and the points the Red and Blue sides gained or lost (always equal and opposite).
+export type MatchRating = ScoredMatch & {
   before: Record<string, number>;
   delta: [number, number];
-  teams: [RatedTeam, RatedTeam];
 };
 
 export type RatingStats = {
@@ -222,7 +221,7 @@ export const computeStats = (matches: ScoredMatch[]): RatingStats => {
     const redDelta = Math.round(
       K_FACTOR * ((redWon ? 1 : 0) - expectedScore(redRating, blueRating)),
     );
-    rated[match.sessionId] = { before, delta: [redDelta, -redDelta], teams: match.teams };
+    rated[match.sessionId] = { ...match, before, delta: [redDelta, -redDelta] };
 
     const sides = [
       { team: red, rivals: blue, won: redWon, delta: redDelta, scored: match.score.red },
@@ -277,20 +276,53 @@ export const computeStats = (matches: ScoredMatch[]): RatingStats => {
 
 export type Standing = {
   player: PlayerStats;
-  // Position on this table's leaderboard; null while provisional.
+  // Position among the players listed on this table's leaderboard; null while provisional.
   place: number | null;
 };
 
-// One table's leaderboard: everyone with a scored game there, in rating order. The rating
-// is the player's overall one, but places are counted among this table's players so the
-// list reads 1, 2, 3 rather than skipping people who only play elsewhere.
-export const tableStandings = (stats: RatingStats, tableCode: string): Standing[] => {
+// Days without a scored game before a player drops off the leaderboards. They keep their
+// rating and reappear with their next game; this is what clears out abandoned accounts,
+// such as the second login of someone who now plays under another.
+export const ACTIVE_DAYS = 60;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Whether the player has a scored game, on any table, within the last ACTIVE_DAYS.
+export const isActive = (player: PlayerStats, now: Date = new Date()): boolean => {
+  const last = player.history[player.history.length - 1];
+
+  return !!last && now.getTime() - last.at.getTime() <= ACTIVE_DAYS * DAY_MS;
+};
+
+// One table's leaderboard: everyone with a scored game there who is still active, in
+// rating order. The rating is the player's overall one, but places are counted among the
+// players listed so the board reads 1, 2, 3 rather than skipping people who only play
+// elsewhere or have stopped playing.
+export const tableStandings = (
+  stats: RatingStats,
+  tableCode: string,
+  now: Date = new Date(),
+): Standing[] => {
   let place = 0;
 
   return stats.players
-    .filter((player) => player.tables.includes(tableCode))
+    .filter((player) => player.tables.includes(tableCode) && isActive(player, now))
     .map((player) => ({ player, place: isProvisional(player) ? null : (place += 1) }));
 };
+
+// Every rated match, newest first, optionally narrowed to one table and/or one player.
+// This is the full history: unlike the live session listeners it has no cut-off.
+export const matchesFor = (
+  stats: RatingStats,
+  { tableCode, uid }: { tableCode?: string; uid?: string },
+): MatchRating[] =>
+  Object.values(stats.matches)
+    .filter(
+      (match) =>
+        (!tableCode || match.tableCode === tableCode) &&
+        (!uid || match.teams.some((team) => team.players.some((player) => player.uid === uid))),
+    )
+    .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
 
 // Rating gained or lost since `since`, measured from the rating held going into it.
 export const ratingChangeSince = (player: PlayerStats, since: Date): number => {

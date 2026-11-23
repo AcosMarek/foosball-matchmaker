@@ -1,5 +1,6 @@
 import styled from "@emotion/styled";
 import {
+  ACTIVE_DAYS,
   PROVISIONAL_GAMES,
   isProvisional,
   ratingChangeSince,
@@ -118,7 +119,10 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
         Leaderboard · {tableName}
       </Eyebrow>
       {standings.length === 0 ? (
-        <Hint>No scored matches on this table yet. Log a result to get on the board.</Hint>
+        <Hint>
+          No scored matches on this table in the last {ACTIVE_DAYS} days. Log a result to get on
+          the board.
+        </Hint>
       ) : (
         <>
           <List>
@@ -149,7 +153,8 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
           </List>
           <Hint>
             Games · wins–losses · rating, counted across all tables. Ranked after{" "}
-            {PROVISIONAL_GAMES} scored games.
+            {PROVISIONAL_GAMES} scored games. Players with no game in the last {ACTIVE_DAYS} days
+            are hidden.
           </Hint>
         </>
       )}

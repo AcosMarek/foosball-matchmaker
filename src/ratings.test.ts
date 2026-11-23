@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTIVE_DAYS,
   PROVISIONAL_GAMES,
   START_RATING,
   bestPartner,
   computeStats,
   expectedScore,
+  isActive,
+  matchesFor,
   parseResultTeams,
   ratingChangeSince,
   ratingOf,
@@ -235,10 +238,12 @@ describe("across tables", () => {
     expect(ada?.games).toBe(PROVISIONAL_GAMES + 1);
   });
 
+  const today = season[season.length - 1].startedAt;
+
   it("lists only a table's own players, placed among themselves", () => {
     const stats = computeStats(season);
-    const office = tableStandings(stats, "OFFICE");
-    const lounge = tableStandings(stats, "LOUNGE");
+    const office = tableStandings(stats, "OFFICE", today);
+    const lounge = tableStandings(stats, "LOUNGE", today);
 
     expect(office.map((entry) => [entry.player.uid, entry.place])).toEqual([
       ["ada", 1],
@@ -251,8 +256,73 @@ describe("across tables", () => {
     expect(stats.players.find((entry) => entry.uid === "bo")?.rank).toBe(4);
   });
 
+  it("returns the whole match history, newest first, by table or by player", () => {
+    const stats = computeStats(season);
+    const everything = matchesFor(stats, {});
+
+    expect(everything).toHaveLength(season.length);
+    expect(everything[0].sessionId).toBe(season[season.length - 1].sessionId);
+    expect(matchesFor(stats, { tableCode: "LOUNGE" })).toHaveLength(PROVISIONAL_GAMES + 1);
+    expect(matchesFor(stats, { uid: "ada" })).toHaveLength(PROVISIONAL_GAMES + 1);
+    // Ada's one away game is the only match that is both hers and at LOUNGE.
+    expect(
+      matchesFor(stats, { tableCode: "LOUNGE", uid: "ada" }).map((match) => match.sessionId),
+    ).toEqual([season[PROVISIONAL_GAMES * 2].sessionId]);
+  });
+
   it("has no standings for a table nobody has scored on", () => {
-    expect(tableStandings(computeStats(season), "EMPTY1")).toEqual([]);
+    expect(tableStandings(computeStats(season), "EMPTY1", today)).toEqual([]);
+  });
+});
+
+describe("activity", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const early = Array.from({ length: PROVISIONAL_GAMES }, () => singles("ada", "bo", 10, 5));
+  const late = Array.from({ length: PROVISIONAL_GAMES }, () => singles("cy", "di", 10, 5));
+  const stats = computeStats([...early, ...late]);
+  const lastEarly = early[early.length - 1].startedAt;
+  const find = (uid: string) => stats.players.find((entry) => entry.uid === uid)!;
+
+  it("counts a player as active up to and including the 60th day", () => {
+    const onTheDay = new Date(lastEarly.getTime() + ACTIVE_DAYS * DAY_MS);
+
+    expect(isActive(find("ada"), onTheDay)).toBe(true);
+    expect(isActive(find("ada"), new Date(onTheDay.getTime() + 1))).toBe(false);
+  });
+
+  it("hides players who have stopped playing and closes the gap in places", () => {
+    // Ada shares the top of the board while everyone is active...
+    const lastLate = late[late.length - 1].startedAt;
+    expect(
+      tableStandings(stats, "OFFICE", lastLate).map((entry) => [entry.player.uid, entry.place]),
+    ).toEqual([
+      ["ada", 1],
+      ["cy", 2],
+      ["bo", 3],
+      ["di", 4],
+    ]);
+
+    // ...and is gone once her last game is more than 60 days old, with Cy now first.
+    const later = new Date(lastEarly.getTime() + (ACTIVE_DAYS + 1) * DAY_MS);
+    expect(
+      tableStandings(stats, "OFFICE", later).map((entry) => [entry.player.uid, entry.place]),
+    ).toEqual([
+      ["cy", 1],
+      ["di", 2],
+    ]);
+    // Hidden, not reset: the rating is untouched for when she plays again.
+    expect(find("ada").rating).toBeGreaterThan(START_RATING);
+  });
+
+  it("goes by the latest game on any table", () => {
+    const away = singles("bo", "eli", 10, 5, "LOUNGE");
+    const withAway = computeStats([...early, ...late, away]);
+    const later = new Date(lastEarly.getTime() + (ACTIVE_DAYS + 1) * DAY_MS);
+
+    // Bo last played at OFFICE too long ago, but a recent game at LOUNGE keeps him listed.
+    expect(tableStandings(withAway, "OFFICE", later).map((entry) => entry.player.uid)).toContain(
+      "bo",
+    );
   });
 });
 

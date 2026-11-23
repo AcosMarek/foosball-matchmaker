@@ -576,3 +576,28 @@ export const Delta = styled.span<{ value: number }>`
         ? "var(--md-sys-color-error)"
         : "var(--md-sys-color-on-surface-variant)"};
 `;
+
+// A slim, rounded scroll bar in the app palette, for scroll areas inside a surface.
+// Chromium and Safari get the ::-webkit- rules, which allow a rounded thumb with no arrow
+// buttons. The standard properties would switch those rules off there, so they are kept
+// for browsers without them (Firefox).
+export const thinScrollbar = css`
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border-radius: var(--md-shape-full);
+    background: var(--md-sys-color-outline-variant);
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--md-sys-color-outline);
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--md-sys-color-outline-variant) transparent;
+  }
+`;
