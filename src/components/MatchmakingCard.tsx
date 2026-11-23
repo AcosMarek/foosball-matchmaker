@@ -19,7 +19,7 @@ import {
   matchSizeLabel,
   type MatchSize,
 } from "../matchmaking";
-import { Button, Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
+import { Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { MatchStatus } from "./MatchStatus";
 
@@ -31,6 +31,22 @@ const TableLine = styled.p`
   & strong {
     font-weight: 600;
   }
+`;
+
+// The one action that matters while a match is filling, so it takes the whole row: wider
+// and taller than a standard M3 button, with the live pulse to draw the eye.
+const JoinButton = styled(PrimaryButton)`
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  animation: pulse 1.8s ease-out infinite;
+`;
+
+const JoinMeta = styled.span`
+  font-weight: 400;
+  opacity: 0.85;
 `;
 
 type Props = {
@@ -49,6 +65,7 @@ export const MatchmakingCard = ({
   sessionPlayers,
 }: Props) => {
   const [feedback, setFeedback] = useState("");
+  const [joinedSessionId, setJoinedSessionId] = useState("");
 
   const targetPlayers = activeSession?.targetPlayers ?? 4;
   const disposition = activeSession ? buildMatchDisposition(sessionPlayers, targetPlayers) : null;
@@ -62,6 +79,17 @@ export const MatchmakingCard = ({
     : null;
   const liveSession = !!activeSession && phase !== "expired";
   const matchFull = phase === "ready";
+
+  // The roster listener can trail the session by a moment, so the starter and a player
+  // who just joined are counted as in without waiting for it.
+  const joined =
+    !!user &&
+    !!activeSession &&
+    (activeSession.startedBy === user.uid ||
+      joinedSessionId === activeSession.id ||
+      sessionPlayers.some((player) => player.uid === user.uid));
+  const canJoin = liveSession && !matchFull && !joined;
+  const spotsLeft = Math.max(0, targetPlayers - sessionPlayers.length);
   const fillRemainingMs = activeSession
     ? fillWindowRemaining(activeSession.startedAt, new Date(now))
     : 0;
@@ -128,6 +156,7 @@ export const MatchmakingCard = ({
     try {
       await registerOnTable(user, selectedTable);
       position = await joinSession(user, activeSession.id, selectedTable);
+      setJoinedSessionId(activeSession.id);
       setFeedback("You're in. Good luck.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -168,24 +197,31 @@ export const MatchmakingCard = ({
         Playing at <strong>{selectedTableName}</strong>
       </TableLine>
       <Row>
-        {SUPPORTED_PLAYER_COUNTS.map((size) => (
-          <PrimaryButton
-            key={size}
-            type="button"
-            disabled={!selectedTable || liveSession}
-            onClick={() => handleStart(size)}
-          >
-            <Icon aria-hidden>add</Icon>
-            New {matchSizeLabel(size)}
-          </PrimaryButton>
-        ))}
-        <Button
-          type="button"
-          disabled={!selectedTable || !liveSession || matchFull}
-          onClick={handleJoin}
-        >
-          Jump in
-        </Button>
+        {canJoin ? (
+          // Starting is impossible while a match is filling, so joining replaces the start
+          // buttons rather than competing with two disabled ones.
+          <JoinButton type="button" disabled={!selectedTable} onClick={handleJoin}>
+            <Icon size={24} aria-hidden>
+              sports_soccer
+            </Icon>
+            Jump in
+            <JoinMeta>
+              · {spotsLeft} spot{spotsLeft === 1 ? "" : "s"} left
+            </JoinMeta>
+          </JoinButton>
+        ) : (
+          SUPPORTED_PLAYER_COUNTS.map((size) => (
+            <PrimaryButton
+              key={size}
+              type="button"
+              disabled={!selectedTable || liveSession}
+              onClick={() => handleStart(size)}
+            >
+              <Icon aria-hidden>add</Icon>
+              New {matchSizeLabel(size)}
+            </PrimaryButton>
+          ))
+        )}
       </Row>
       <MatchStatus
         phase={phase}
