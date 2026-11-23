@@ -71,8 +71,8 @@ export const NotificationPrompt = ({ onActivate, onDismiss, onSilence }: Props) 
       </Icon>
       <Headline id="notification-prompt-title">Turn on notifications?</Headline>
       <Body>
-        Get pinged the moment a match starts or needs one more player — even when this tab is
-        closed.
+        Get pinged the moment a match starts on your table and when your game is ready — even
+        when this tab is closed.
       </Body>
       <Actions>
         <Decline type="button" onClick={onSilence}>

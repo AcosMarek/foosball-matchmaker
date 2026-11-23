@@ -5,6 +5,7 @@ import {
   joinSession,
   notifyJoin,
   notifyMatchExpired,
+  notifyTableMembers,
   registerOnTable,
   startSession,
 } from "../api";
@@ -95,16 +96,26 @@ export const MatchmakingCard = ({
 
     try {
       await registerOnTable(user, selectedTable);
-
-      const notified = await startSession(user, selectedTable, size);
-      setFeedback(
-        notified > 0
-          ? `${matchSizeLabel(size)} is on — pinged ${notified} player${notified === 1 ? "" : "s"}.`
-          : `${matchSizeLabel(size)} is on — you're first in.`,
-      );
+      await startSession(user, selectedTable, size);
+      setFeedback(`${matchSizeLabel(size)} is on — you're first in.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setFeedback(`Couldn't start: ${message}`);
+      return;
+    }
+
+    // Best-effort: the match exists either way, so a failed alert must not surface as a
+    // failed start — but it must not pass silently either.
+    try {
+      const notified = await notifyTableMembers(user, selectedTable, size);
+      if (notified > 0) {
+        setFeedback(
+          `${matchSizeLabel(size)} is on — pinged ${notified} player${notified === 1 ? "" : "s"}.`,
+        );
+      }
+    } catch (error) {
+      console.error("notifyTableMembers failed", error);
+      setFeedback(`${matchSizeLabel(size)} is on, but the table couldn't be alerted.`);
     }
   };
 

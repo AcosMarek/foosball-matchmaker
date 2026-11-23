@@ -5,7 +5,6 @@ import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
 import {
   useActiveSession,
   useAuth,
-  useIncomingNotifications,
   useNotifications,
   useRecentSessions,
   useSessionPlayers,
@@ -54,7 +53,6 @@ export default function App() {
   const tableMemberCount = useTableMemberCount(user, selectedTable);
   const recentSessions = useRecentSessions(selectedTable);
   const notifications = useNotifications(user);
-  useIncomingNotifications(user);
   useTableRegistration(user, selectedTable);
 
   // Remember the last selected table so it is restored on the next visit.

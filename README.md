@@ -68,7 +68,9 @@ than five minutes old.
 - `tableMembers`
 - `sessions`
 - `sessionJoins`
-- `notifications`
+- `pushTokens` (one document per device registered for Web Push)
+- `tableIntegrations` (per-table Slack webhook, admin-only)
+- `notifications` (legacy: no longer written or read, rules kept for cached older clients)
 - `admins` (admin UID documents)
 
 Security rules are provided in `/firestore.rules` and recommended indexes in

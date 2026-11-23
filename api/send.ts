@@ -1,10 +1,17 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import {
+  FieldValue,
+  Timestamp,
+  getFirestore,
+  type DocumentReference,
+  type Firestore,
+} from "firebase-admin/firestore";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
 // The .js extension is required: package.json sets "type": "module", so the compiled
 // function runs as ESM and Node will not resolve an extensionless relative import.
 import { buildSlackPayload, parseRoster, type Roster } from "./_lib/slackMessage.js";
+import { chunk, summarizeDelivery, type TokenTarget } from "./_lib/pushFanout.js";
 
 // Deploy target: a free serverless host (e.g. Vercel Hobby). Env vars:
 //   FIREBASE_SERVICE_ACCOUNT  — the service account JSON (required, secret)
@@ -27,8 +34,9 @@ const ensureApp = () =>
   });
 
 // Verify a Firebase ID token without firebase-admin/auth: Google validates the token
-// (signature + expiry) and returns 200 only when it is genuine.
-const isValidIdToken = async (idToken: string): Promise<boolean> => {
+// (signature + expiry) and returns the account only when it is genuine. Resolves to the
+// caller's uid, or null when the token is rejected.
+const verifyIdToken = async (idToken: string): Promise<string | null> => {
   try {
     const response = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
@@ -38,13 +46,31 @@ const isValidIdToken = async (idToken: string): Promise<boolean> => {
         body: JSON.stringify({ idToken }),
       },
     );
-    return response.ok;
+    if (!response.ok) {
+      return null;
+    }
+
+    const body = (await response.json()) as { users?: { localId?: unknown }[] };
+    const uid = body.users?.[0]?.localId;
+
+    return typeof uid === "string" && uid ? uid : null;
   } catch {
-    return false;
+    return null;
   }
 };
 
+// Cap on a caller-supplied recipient list (the players of one match).
 const MAX_RECIPIENTS = 8;
+// Cap on a table-wide fan-out, resolved server-side from tableMembers.
+const MAX_TABLE_RECIPIENTS = 500;
+// Firestore caps an `in` filter at 30 values, FCM a multicast at 500 tokens.
+const TOKEN_QUERY_CHUNK = 30;
+const MULTICAST_CHUNK = 500;
+// A match fills or resets within five minutes, so an alert that can't be delivered in
+// that window is dropped rather than arriving stale.
+const PUSH_TTL_SECONDS = 300;
+// How long after a session is created its starter may trigger the table-wide push.
+const START_PUSH_WINDOW_MS = 2 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 200;
 const TABLE_CODE_RE = /^[A-Z0-9]{6}$/;
 const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
@@ -100,40 +126,116 @@ const postToSlack = async (
   return response.ok;
 };
 
+// A table-wide push is only sent for a session the caller really just started, and only
+// once per session: that keeps any signed-in user from using this endpoint to spam a
+// table, and makes a retried request harmless.
+const claimStartPush = async (db: Firestore, tableCode: string, uid: string): Promise<boolean> => {
+  const latest = await db
+    .collection("sessions")
+    .where("tableCode", "==", tableCode)
+    .orderBy("startedAt", "desc")
+    .limit(1)
+    .get();
+  const session = latest.docs[0];
+  if (!session) {
+    return false;
+  }
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(session.ref);
+    const startedAt: unknown = snap.get("startedAt");
+    const fresh =
+      startedAt instanceof Timestamp && Date.now() - startedAt.toMillis() < START_PUSH_WINDOW_MS;
+
+    if (snap.get("startedBy") !== uid || !fresh || snap.get("startNotifiedAt")) {
+      return false;
+    }
+
+    tx.update(session.ref, { startNotifiedAt: FieldValue.serverTimestamp() });
+    return true;
+  });
+};
+
+// Everyone registered on the table except the caller, who already knows.
+const tableMemberUids = async (db: Firestore, tableCode: string, uid: string): Promise<string[]> => {
+  const snapshot = await db
+    .collection("tableMembers")
+    .where("tableCode", "==", tableCode)
+    .limit(MAX_TABLE_RECIPIENTS)
+    .get();
+  const uids = snapshot.docs
+    .map((member): unknown => member.get("uid"))
+    .filter((member): member is string => typeof member === "string" && member !== uid);
+
+  return [...new Set(uids)];
+};
+
+// Resolves to the number of users reached on at least one device.
 const pushToUsers = async (
   db: Firestore,
   messaging: Messaging,
   uids: string[],
-  body: string,
+  data: Record<string, string>,
 ): Promise<number> => {
   if (uids.length === 0) {
     return 0;
   }
 
-  const snapshot = await db.collection("pushTokens").where("uid", "in", uids).get();
-  const tokens = snapshot.docs
-    .map((document): unknown => document.get("token"))
-    .filter((token): token is string => typeof token === "string");
+  const snapshots = await Promise.all(
+    chunk(uids, TOKEN_QUERY_CHUNK).map((group) =>
+      db.collection("pushTokens").where("uid", "in", group).get(),
+    ),
+  );
 
-  console.log(`send: ${uids.length} recipient(s), ${tokens.length} token(s)`);
-  if (tokens.length === 0) {
+  const refs = new Map<string, DocumentReference>();
+  const targets: TokenTarget[] = [];
+  for (const document of snapshots.flatMap((snapshot) => snapshot.docs)) {
+    const token: unknown = document.get("token");
+    const owner: unknown = document.get("uid");
+    if (typeof token === "string" && typeof owner === "string" && !refs.has(token)) {
+      refs.set(token, document.ref);
+      targets.push({ uid: owner, token });
+    }
+  }
+
+  console.log(`send: ${uids.length} recipient(s), ${targets.length} token(s)`);
+  if (targets.length === 0) {
     return 0;
   }
 
-  const response = await messaging.sendEachForMulticast({
-    tokens,
-    data: { title: "Foosball Matchmaker", body },
-  });
+  const responses = await Promise.all(
+    chunk(targets, MULTICAST_CHUNK).map((group) =>
+      messaging.sendEachForMulticast({
+        tokens: group.map((target) => target.token),
+        data,
+        // Data-only messages default to normal urgency, which a dozing phone may hold
+        // back for minutes; a match alert is only useful right now.
+        webpush: { headers: { Urgency: "high", TTL: String(PUSH_TTL_SECONDS) } },
+      }),
+    ),
+  );
 
-  console.log(`send: delivered ${response.successCount}/${tokens.length}`);
-  if (response.failureCount > 0) {
-    console.error(
-      "send: failures",
-      response.responses.map((r, i) => (r.success ? null : `${i}:${r.error?.code}`)).filter(Boolean),
-    );
+  const summary = summarizeDelivery(
+    targets,
+    responses.flatMap((response) => response.responses),
+  );
+
+  console.log(
+    `send: delivered ${summary.delivered}/${targets.length} to ${summary.notifiedUids.length} user(s)`,
+  );
+  if (summary.failures.length > 0) {
+    console.error("send: failures", summary.failures);
   }
 
-  return response.successCount;
+  // Best-effort cleanup so dead devices stop inflating every later fan-out.
+  if (summary.deadTokens.length > 0) {
+    await Promise.all(summary.deadTokens.map((token) => refs.get(token)?.delete())).catch((err) =>
+      console.error("send: token cleanup failed", err),
+    );
+    console.log(`send: pruned ${summary.deadTokens.length} dead token(s)`);
+  }
+
+  return summary.notifiedUids.length;
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -182,23 +284,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   // Authn: the caller must present a valid Firebase ID token. This stops the endpoint
   // from being an open relay; recipient tokens are then resolved server-side only.
-  if (!(await isValidIdToken(idToken))) {
+  const callerUid = await verifyIdToken(idToken);
+  if (!callerUid) {
     console.warn("send: unauthorized (invalid id token)");
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const uids = recipients
-    .filter((uid): uid is string => typeof uid === "string")
-    .slice(0, MAX_RECIPIENTS);
   const body = message.slice(0, MAX_MESSAGE_LENGTH);
+  const data = { title: "Foosball Matchmaker", body, tableCode: table, event: kind };
 
-  // The two channels are independent: neither failing may suppress the other.
+  // A match start goes to the whole table, resolved here rather than trusted from the
+  // client; every other event goes to the players the caller listed.
+  const resolveUids = async (): Promise<string[]> => {
+    if (kind === "start" && table) {
+      if (!(await claimStartPush(db, table, callerUid))) {
+        console.warn(`send: start push for ${table} not claimed`);
+        return [];
+      }
+
+      return tableMemberUids(db, table, callerUid);
+    }
+
+    return recipients
+      .filter((uid): uid is string => typeof uid === "string")
+      .slice(0, MAX_RECIPIENTS);
+  };
+
+  // `sent` is the number of users reached on at least one device. The two channels are
+  // independent: neither failing may suppress the other.
   const [sent, slack] = await Promise.all([
-    pushToUsers(db, messaging, uids, body).catch((err) => {
-      console.error("send: push failed", err);
-      return 0;
-    }),
+    resolveUids()
+      .then((uids) => pushToUsers(db, messaging, uids, data))
+      .catch((err) => {
+        console.error("send: push failed", err);
+        return 0;
+      }),
     table
       ? postToSlack(db, table, kind, body, roster).catch((err) => {
           console.error("send: slack failed", err);

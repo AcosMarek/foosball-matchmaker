@@ -52,23 +52,33 @@ type NotifyPayload = {
   teams?: NotifyTeam[];
 };
 
-// Fire-and-forget fan-out via the serverless sender: Web Push to the listed users, plus a
-// Slack post when the table has a webhook configured. No-op until the endpoint is set, so
-// local dev without it still works.
+// Fan-out via the serverless sender: Web Push plus a Slack post when the table has a
+// webhook configured. A "start" is pushed to everyone registered on the table (the sender
+// resolves them itself); every other event goes to the listed recipients. Resolves to the
+// number of users reached by push, and rejects when the sender refuses the request so a
+// misconfigured relay can't pass for a delivered alert. No-op until the endpoint is set,
+// so local dev without it still works.
 const sendNotification = async (
   user: User,
   { recipients = [], message, tableCode = "", event, teams = [] }: NotifyPayload,
-): Promise<void> => {
+): Promise<number> => {
   if (!PUSH_ENDPOINT || (recipients.length === 0 && !tableCode)) {
-    return;
+    return 0;
   }
 
   const idToken = await user.getIdToken();
-  await fetch(PUSH_ENDPOINT, {
+  const response = await fetch(PUSH_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken, recipients, message, tableCode, event, teams }),
   });
+  if (!response.ok) {
+    throw new Error(`Notification sender answered ${response.status}`);
+  }
+
+  const result = (await response.json().catch(() => ({}))) as { sent?: unknown };
+
+  return typeof result.sent === "number" ? result.sent : 0;
 };
 
 export const registerOnTable = async (user: User, tableCode: string): Promise<void> => {
@@ -126,39 +136,22 @@ export const joinSession = async (
   });
 };
 
-export const notifyTableMembers = async (
+// Announces a new match to the table: Web Push to every registered member (so they hear
+// about it with the tab closed) plus Slack. Resolves to the number of members actually
+// reached, which can be well below the registered count — not everyone has notifications
+// switched on. Rejects when the sender fails, so the caller can say so.
+export const notifyTableMembers = (
   user: User,
   tableCode: string,
   targetPlayers: MatchSize,
-): Promise<number> => {
-  const snapshot = await getDocs(
-    query(collection(db, "tableMembers"), where("tableCode", "==", tableCode)),
-  );
-  const others = snapshot.docs.filter((member) => member.data().uid !== user.uid);
-  const message = `${user.displayName || "A player"} started a ${matchSizeLabel(
-    targetPlayers,
-  )} on ${tableCode}.`;
-
-  await Promise.all(
-    others.map((member) =>
-      addDoc(collection(db, "notifications"), {
-        toUid: member.data().uid,
-        tableCode,
-        read: false,
-        createdAt: serverTimestamp(),
-        message,
-      }),
-    ),
-  );
-
-  // Slack only: members are already covered by the notification docs above, and pushing
-  // here too would double-notify them. Best-effort, so a relay outage can't block a start.
-  await sendNotification(user, { message, tableCode, event: "start" }).catch((error) =>
-    console.error("start notification failed", error),
-  );
-
-  return others.length;
-};
+): Promise<number> =>
+  sendNotification(user, {
+    message: `${user.displayName || "A player"} started a ${matchSizeLabel(
+      targetPlayers,
+    )} on ${tableCode}.`,
+    tableCode,
+    event: "start",
+  });
 
 // Roster for a session, in join order. Forced to the server: a player arriving straight
 // from a Slack link has a partly-synced cache holding their own write but not everyone
@@ -242,11 +235,9 @@ export const notifyJoin = async (
     : `${players.length}/${targetPlayers} in.`;
   const recipients = players.slice(0, targetPlayers).filter((player) => player.uid !== user.uid);
 
-  // Delivered via Web Push so recipients are alerted even with the tab closed. No
-  // Firestore notification doc here: that path only fires in an open tab and would
-  // double-notify foreground users. `message` stays the terse push body; Slack renders
-  // the roster from `teams` instead.
-  await sendNotification(user, {
+  // Delivered via Web Push so recipients are alerted even with the tab closed. `message`
+  // stays the terse push body; Slack renders the roster from `teams` instead.
+  return sendNotification(user, {
     message: `Game on! ${lineup}`,
     recipients: recipients.map((player) => player.uid),
     tableCode,
@@ -259,8 +250,6 @@ export const notifyJoin = async (
       })),
     })),
   });
-
-  return recipients.length;
 };
 
 // Announces a match that ran out of time before filling. The claim keeps it to one post
@@ -314,11 +303,13 @@ export const getLatestSessionStart = async (tableCode: string): Promise<Date | n
   return toDate(snapshot.docs[0]?.data().startedAt);
 };
 
+// Creates the match and seats its starter. Announcing it is a separate, best-effort step
+// (notifyTableMembers) so a notification failure can't read as a failed start.
 export const startSession = async (
   user: User,
   tableCode: string,
   targetPlayers: MatchSize,
-): Promise<number> => {
+): Promise<void> => {
   const sessionRef = await addDoc(collection(db, "sessions"), {
     tableCode,
     startedBy: user.uid,
@@ -329,7 +320,6 @@ export const startSession = async (
   });
 
   await joinSession(user, sessionRef.id, tableCode);
-  return notifyTableMembers(user, tableCode, targetPlayers);
 };
 
 export const getTable = async (code: string): Promise<FoosballTable | null> => {

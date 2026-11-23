@@ -58,12 +58,23 @@ export const registerForPush = async (user: User): Promise<void> => {
     updatedAt: serverTimestamp(),
   });
 
+  // With the app visible FCM hands the message to the page instead of the service
+  // worker, so it is shown from here — through the registration, because the
+  // `new Notification()` constructor throws on Android. Mirrors firebase-messaging-sw.js.
   if (!foregroundHandlerSet) {
     foregroundHandlerSet = true;
     onMessage(messaging, (payload) => {
       const title = payload.data?.title ?? "Foosball Matchmaker";
-      const body = payload.data?.body ?? "A foosball match is ready.";
-      void registration.showNotification(title, { body, tag: "foosball-match" });
+      const tableCode = payload.data?.tableCode ?? "";
+      // `renotify` re-alerts when a newer message replaces one still sitting in the tray
+      // under the same tag; it is missing from TypeScript's DOM typings.
+      const options: NotificationOptions & { renotify: boolean } = {
+        body: payload.data?.body ?? "A foosball match is ready.",
+        tag: "foosball-match",
+        renotify: true,
+        data: { url: tableCode ? `/?table=${encodeURIComponent(tableCode)}` : "/" },
+      };
+      void registration.showNotification(title, options);
     });
   }
 };
