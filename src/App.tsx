@@ -9,6 +9,7 @@ import {
   useRecentSessions,
   useSessionPlayers,
   useTableMemberCount,
+  useRatingStats,
   useTableRegistration,
   useVisitedTables,
 } from "./hooks";
@@ -19,6 +20,9 @@ import { NotificationPrompt } from "./components/NotificationPrompt";
 import { TableSelector } from "./components/TableSelector";
 import { MatchmakingCard } from "./components/MatchmakingCard";
 import { MatchHistoryCard } from "./components/MatchHistoryCard";
+import { LeaderboardCard } from "./components/LeaderboardCard";
+import { StatsDialog } from "./components/StatsDialog";
+import { tableStandings } from "./ratings";
 import { RecordResultCard } from "./components/RecordResultCard";
 import { QrCard } from "./components/QrCard";
 
@@ -53,6 +57,13 @@ export default function App() {
   const tableMemberCount = useTableMemberCount(user, selectedTable);
   const recentSessions = useRecentSessions(selectedTable);
   const notifications = useNotifications(user);
+  const stats = useRatingStats(user);
+  // This table's leaderboard: the overall ratings of the people who have played here.
+  const standings = useMemo(
+    () => (stats && selectedTable ? tableStandings(stats, selectedTable) : null),
+    [stats, selectedTable],
+  );
+  const [statsOpen, setStatsOpen] = useState(false);
   useTableRegistration(user, selectedTable);
 
   // Remember the last selected table so it is restored on the next visit.
@@ -142,6 +153,7 @@ export default function App() {
             user={user}
             permission={notifications.permission}
             onRequestNotifications={notifications.requestPermission}
+            onOpenStats={selectedTable ? () => setStatsOpen(true) : undefined}
           />
         )}
       </TopBar>
@@ -151,6 +163,16 @@ export default function App() {
           onActivate={notifications.requestPermission}
           onDismiss={notifications.dismissPrompt}
           onSilence={notifications.silencePrompt}
+        />
+      )}
+
+      {user && statsOpen && (
+        <StatsDialog
+          player={stats?.players.find((player) => player.uid === user.uid) ?? null}
+          place={standings?.find((entry) => entry.player.uid === user.uid)?.place ?? null}
+          placedCount={standings?.filter((entry) => entry.place !== null).length ?? 0}
+          tableName={selectedTableName}
+          onClose={() => setStatsOpen(false)}
         />
       )}
 
@@ -172,13 +194,24 @@ export default function App() {
             selectedTableName={selectedTableName}
             activeSession={activeSession}
             sessionPlayers={sessionPlayers}
+            stats={stats}
           />
 
           {pendingResult && (
             <RecordResultCard user={user} session={pendingResult} tableCode={selectedTable} />
           )}
 
-          {selectedTable && <MatchHistoryCard sessions={recentSessions} />}
+          {selectedTable && (
+            <LeaderboardCard
+              standings={standings}
+              tableName={selectedTableName}
+              currentUid={user.uid}
+            />
+          )}
+
+          {selectedTable && (
+            <MatchHistoryCard sessions={recentSessions} stats={stats} currentUid={user.uid} />
+          )}
 
           {selectedTable && <QrCard selectedTable={selectedTable} />}
         </>

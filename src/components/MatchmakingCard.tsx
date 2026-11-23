@@ -20,6 +20,7 @@ import {
   type MatchSize,
 } from "../matchmaking";
 import { Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
+import type { RatingStats } from "../ratings";
 import type { JoinedPlayer, Session } from "../types";
 import { MatchStatus } from "./MatchStatus";
 
@@ -55,6 +56,7 @@ type Props = {
   selectedTableName: string;
   activeSession: Session | null;
   sessionPlayers: JoinedPlayer[];
+  stats: RatingStats | null;
 };
 
 export const MatchmakingCard = ({
@@ -63,6 +65,7 @@ export const MatchmakingCard = ({
   selectedTableName,
   activeSession,
   sessionPlayers,
+  stats,
 }: Props) => {
   const [feedback, setFeedback] = useState("");
   const [joinedSessionId, setJoinedSessionId] = useState("");
@@ -234,6 +237,7 @@ export const MatchmakingCard = ({
         waiting={waiting}
         fillRemainingMs={fillRemainingMs}
         cooldownMs={cooldownMs}
+        stats={stats}
       />
       {feedback && <Hint>{feedback}</Hint>}
     </Card>

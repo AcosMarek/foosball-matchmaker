@@ -1,5 +1,6 @@
 import styled from "@emotion/styled";
-import { Icon } from "../ui";
+import { ratingOf, teamAverage, type RatingStats } from "../ratings";
+import { Icon, Rating } from "../ui";
 import type { MatchDisposition, TeamPlayer } from "../matchmaking";
 
 const Ready = styled.div`
@@ -50,6 +51,17 @@ const Waiting = styled.div`
   color: var(--md-sys-color-on-primary-container);
 `;
 
+const TeamPlayers = styled.span`
+  flex: 1;
+  min-width: 0;
+`;
+
+const Average = styled.span`
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
 const describeTeamPlayer = (teamPlayer: TeamPlayer): string =>
   teamPlayer.position === "solo"
     ? teamPlayer.player.displayName
@@ -58,9 +70,11 @@ const describeTeamPlayer = (teamPlayer: TeamPlayer): string =>
 type Props = {
   disposition: MatchDisposition;
   waiting: string[];
+  // Null while ratings are loading or unavailable; the teams then show names only.
+  stats: RatingStats | null;
 };
 
-export const DispositionAlert = ({ disposition, waiting }: Props) => (
+export const DispositionAlert = ({ disposition, waiting, stats }: Props) => (
   <Ready role="status">
     <ReadyHead>
       <Icon fill={1} aria-hidden>
@@ -72,7 +86,26 @@ export const DispositionAlert = ({ disposition, waiting }: Props) => (
       {disposition.teams.map((team) => (
         <Team key={team.color} style={{ borderLeftColor: team.colorHex }}>
           <TeamName style={{ color: team.colorHex }}>{team.color}</TeamName>
-          <span>{team.players.map(describeTeamPlayer).join(", ")}</span>
+          <TeamPlayers>
+            {team.players.map((entry, index) => (
+              <span key={entry.player.uid}>
+                {index > 0 && ", "}
+                {describeTeamPlayer(entry)}
+                {stats && (
+                  <>
+                    {" "}
+                    <Rating>{ratingOf(stats, entry.player.uid)}</Rating>
+                  </>
+                )}
+              </span>
+            ))}
+          </TeamPlayers>
+          {stats && team.players.length > 1 && (
+            <Average>
+              avg{" "}
+              {teamAverage(team.players.map((entry) => ratingOf(stats, entry.player.uid)))}
+            </Average>
+          )}
         </Team>
       ))}
     </Teams>

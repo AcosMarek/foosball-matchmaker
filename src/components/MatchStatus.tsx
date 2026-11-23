@@ -6,7 +6,8 @@ import {
   type MatchDisposition,
   type MatchPhase,
 } from "../matchmaking";
-import { Badge, CountdownRing, Icon, LiveDot, StatValue } from "../ui";
+import { ratingOf, type RatingStats } from "../ratings";
+import { Badge, CountdownRing, Icon, LiveDot, Rating, StatValue } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { DispositionAlert } from "./DispositionAlert";
 
@@ -113,6 +114,8 @@ type Props = {
   waiting: string[];
   fillRemainingMs: number;
   cooldownMs: number;
+  // Null while ratings are loading or unavailable; the queue then shows names only.
+  stats: RatingStats | null;
 };
 
 export const MatchStatus = ({
@@ -126,6 +129,7 @@ export const MatchStatus = ({
   waiting,
   fillRemainingMs,
   cooldownMs,
+  stats,
 }: Props) => {
   if (phase === "expired") {
     return (
@@ -174,6 +178,7 @@ export const MatchStatus = ({
             <Chip key={player.uid}>
               <ChipIndex>{index + 1}</ChipIndex>
               {player.displayName}
+              {stats && <Rating>{ratingOf(stats, player.uid)}</Rating>}
             </Chip>
           ))}
         </PlayerChips>
@@ -202,7 +207,9 @@ export const MatchStatus = ({
         </CountWrap>
       )}
 
-      {disposition && <DispositionAlert disposition={disposition} waiting={waiting} />}
+      {disposition && (
+        <DispositionAlert disposition={disposition} waiting={waiting} stats={stats} />
+      )}
     </StatusBlock>
   );
 };

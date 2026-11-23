@@ -2,7 +2,7 @@ import { signInWithPopup, signOut, type User } from "firebase/auth";
 import styled from "@emotion/styled";
 import { auth, googleAuthProvider } from "../firebase";
 import type { NotificationState } from "../hooks";
-import { Avatar, Card, Icon, IconButton, PrimaryButton, RodMark } from "../ui";
+import { Avatar, Card, Icon, IconButton, PrimaryButton, RodMark, TonalButton } from "../ui";
 
 const Identity = styled.div`
   display: inline-flex;
@@ -23,6 +23,18 @@ const Name = styled.span`
   }
 `;
 
+const StatsButton = styled(TonalButton)`
+  padding: 0 1rem;
+  @media (max-width: 480px) {
+    /* Icon only on a phone, where the top bar has no room for the label */
+    width: 40px;
+    padding: 0;
+    & > span:last-of-type {
+      display: none;
+    }
+  }
+`;
+
 const initialOf = (user: User): string =>
   (user.displayName || user.email || "?").trim().charAt(0).toUpperCase();
 
@@ -30,10 +42,13 @@ export const AuthBar = ({
   user,
   permission,
   onRequestNotifications,
+  onOpenStats,
 }: {
   user: User;
   permission: NotificationState;
   onRequestNotifications: () => void;
+  // Absent until a table is selected: statistics are per table.
+  onOpenStats?: () => void;
 }) => {
   const bellIcon =
     permission === "granted"
@@ -52,6 +67,12 @@ export const AuthBar = ({
 
   return (
     <Identity>
+      {onOpenStats && (
+        <StatsButton type="button" aria-label="Your statistics" onClick={onOpenStats}>
+          <Icon aria-hidden>bar_chart</Icon>
+          <span>Your stats</span>
+        </StatsButton>
+      )}
       <IconButton
         type="button"
         title={bellLabel}

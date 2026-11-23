@@ -10,6 +10,9 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 - Register on table and receive browser notifications when a new matchmaking session starts
 - Start a new matchmaking session or join active one
 - Enforces one new session start per table every 10 minutes
+- Elo ratings, computed in the browser from the scored matches (`src/ratings.ts`): one
+  rating per player across all tables, a leaderboard per table, personal statistics, and
+  ratings in the queue and match history
 
 ## Setup
 

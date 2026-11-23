@@ -1,20 +1,6 @@
 import { useEffect, useRef } from "react";
 import styled from "@emotion/styled";
-import { Icon, PrimaryButton, TextButton } from "../ui";
-
-const Dialog = styled.dialog`
-  /* M3 basic dialog */
-  width: min(24rem, calc(100vw - 2rem));
-  padding: 1.5rem;
-  border: none;
-  border-radius: 28px;
-  background: var(--md-sys-color-surface-container-high);
-  color: var(--md-sys-color-on-surface);
-  box-shadow: var(--md-elevation-2);
-  &::backdrop {
-    background: rgba(0, 0, 0, 0.32);
-  }
-`;
+import { Dialog, Icon, PrimaryButton, TextButton } from "../ui";
 
 const Headline = styled.h2`
   margin: 0.75rem 0 1rem;

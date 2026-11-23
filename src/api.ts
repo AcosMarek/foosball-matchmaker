@@ -30,6 +30,7 @@ import {
   type MatchSize,
   type TeamPosition,
 } from "./matchmaking";
+import { teamsFromDisposition } from "./ratings";
 import { toDate } from "./utils";
 import type { FoosballTable } from "./types";
 
@@ -376,6 +377,40 @@ export const setTableSlackWebhook = async (
   );
 };
 
+// Rosters for several sessions at once, keyed by session id, each in join order. Used to
+// rebuild the teams of results recorded before teams were stored on the result itself.
+// Firestore caps an `in` filter at 30 values, so the ids go out in groups.
+export const getSessionRosters = async (
+  sessionIds: string[],
+): Promise<Map<string, RosterEntry[]>> => {
+  const groups: string[][] = [];
+  for (let i = 0; i < sessionIds.length; i += 30) {
+    groups.push(sessionIds.slice(i, i + 30));
+  }
+
+  const snapshots = await Promise.all(
+    groups.map((group) =>
+      getDocs(query(collection(db, "sessionJoins"), where("sessionId", "in", group))),
+    ),
+  );
+
+  const bySession = new Map<string, RosterEntry[]>();
+  for (const joinDoc of snapshots.flatMap((snapshot) => snapshot.docs)) {
+    const data = joinDoc.data();
+    const sessionId = String(data.sessionId || "");
+    bySession.set(sessionId, [
+      ...(bySession.get(sessionId) ?? []),
+      {
+        uid: String(data.uid || ""),
+        displayName: String(data.displayName || "Player"),
+        joinedAt: toDate(data.joinedAt),
+      },
+    ]);
+  }
+
+  return new Map([...bySession].map(([sessionId, roster]) => [sessionId, mergeRoster(roster)]));
+};
+
 export const getSessionDisposition = async (
   sessionId: string,
   targetPlayers: MatchSize,
@@ -383,19 +418,22 @@ export const getSessionDisposition = async (
   buildMatchDisposition(await readSessionPlayers(sessionId), targetPlayers);
 
 // Only the player who started the match may log its score; the rules enforce that too,
-// so a tampered client can't write someone else's result. Slack is best-effort.
+// so a tampered client can't write someone else's result. The teams are stored with the
+// score (who played where, by uid) so ratings never have to guess them from the join
+// order later; `lineup` stays as the readable summary. Slack is best-effort.
 export const recordMatchResult = async (
   user: User,
   sessionId: string,
   tableCode: string,
   score: MatchScore,
-  lineup: string,
+  disposition: MatchDisposition | null,
 ): Promise<void> => {
   await updateDoc(doc(db, "sessions", sessionId), {
     result: {
       red: score.red,
       blue: score.blue,
-      lineup,
+      lineup: disposition ? describeDisposition(disposition) : "",
+      ...(disposition ? { teams: teamsFromDisposition(disposition) } : {}),
       recordedBy: user.uid,
       recordedAt: serverTimestamp(),
     },

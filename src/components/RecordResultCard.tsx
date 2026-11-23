@@ -4,7 +4,6 @@ import type { User } from "firebase/auth";
 import { getSessionDisposition, recordMatchResult } from "../api";
 import {
   WINNING_GOALS,
-  describeDisposition,
   isValidScore,
   matchSizeLabel,
   type MatchDisposition,
@@ -83,13 +82,7 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
     setBusy(true);
     setStatus("");
     try {
-      await recordMatchResult(
-        user,
-        session.id,
-        tableCode,
-        score,
-        disposition ? describeDisposition(disposition) : "",
-      );
+      await recordMatchResult(user, session.id, tableCode, score, disposition);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setStatus(`Couldn't save the result: ${message}`);

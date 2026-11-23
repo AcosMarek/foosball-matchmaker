@@ -540,3 +540,39 @@ export const CountdownRing = ({
     </RingWrap>
   );
 };
+
+export const Dialog = styled.dialog`
+  /* M3 basic dialog */
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: none;
+  border-radius: 28px;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-elevation-2);
+  &::backdrop {
+    background: rgba(0, 0, 0, 0.32);
+  }
+`;
+
+export const Rating = styled.span`
+  /* An Elo rating shown beside a name: quiet, and fixed-width so columns line up */
+  font-family: "Roboto Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
+export const Delta = styled.span<{ value: number }>`
+  /* Rating points gained (green) or lost (red) */
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: ${(props) =>
+    props.value > 0
+      ? "var(--md-sys-color-primary)"
+      : props.value < 0
+        ? "var(--md-sys-color-error)"
+        : "var(--md-sys-color-on-surface-variant)"};
+`;

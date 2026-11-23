@@ -11,10 +11,22 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { registerOnTable } from "./api";
+import { getSessionRosters, registerOnTable } from "./api";
 import { registerForPush } from "./push";
 import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
-import { canStartMatch } from "./matchmaking";
+import {
+  buildMatchDisposition,
+  canStartMatch,
+  isValidScore,
+  type RosterEntry,
+} from "./matchmaking";
+import {
+  computeStats,
+  parseResultTeams,
+  teamsFromDisposition,
+  type ScoredMatch,
+  type RatingStats,
+} from "./ratings";
 import { toDate } from "./utils";
 import type { FoosballTable, JoinedPlayer, Session } from "./types";
 
@@ -184,6 +196,102 @@ export const useRecentSessions = (selectedTable: string): Session[] => {
   }, [selectedTable]);
 
   return sessions;
+};
+
+// A scored session as a rateable match. Results recorded before teams were stored fall
+// back to the join order, the same rule that assigned the teams on the day.
+const readScoredMatch = (
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+  rosters: Map<string, RosterEntry[]>,
+): ScoredMatch | null => {
+  const data = snapshot.data();
+  const startedAt = toDate(data.startedAt);
+  const result = data.result;
+  if (!startedAt || !result) {
+    return null;
+  }
+
+  const score = { red: Number(result.red), blue: Number(result.blue) };
+  const size = data.targetPlayers === 2 ? 2 : 4;
+  const fromRoster = buildMatchDisposition(rosters.get(snapshot.id) ?? [], size);
+  const teams = parseResultTeams(result.teams) ?? (fromRoster && teamsFromDisposition(fromRoster));
+  if (!isValidScore(score) || !teams) {
+    return null;
+  }
+
+  return {
+    sessionId: snapshot.id,
+    tableCode: String(data.tableCode || ""),
+    startedAt,
+    size,
+    score,
+    teams,
+  };
+};
+
+// Elo ratings and player statistics across every table, live: they update the moment a
+// result is logged anywhere. Null while loading or when the history can't be read.
+// Ordering by the result's timestamp is what restricts the listener to scored sessions
+// (Firestore leaves out documents missing the ordered field), so the many unfilled
+// matches are never downloaded.
+export const useRatingStats = (user: User | null): RatingStats | null => {
+  const [stats, setStats] = useState<RatingStats | null>(null);
+
+  useEffect(() => {
+    setStats(null);
+    if (!user) {
+      return;
+    }
+
+    const rosters = new Map<string, RosterEntry[]>();
+    let latest = 0;
+    let cancelled = false;
+
+    const q = query(collection(db, "sessions"), orderBy("result.recordedAt", "asc"));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const run = async () => {
+          const turn = (latest += 1);
+          const missing = snapshot.docs
+            .filter((scored) => !parseResultTeams(scored.data().result?.teams))
+            .map((scored) => scored.id)
+            .filter((id) => !rosters.has(id));
+
+          if (missing.length > 0) {
+            const loaded = await getSessionRosters(missing);
+            for (const id of missing) {
+              rosters.set(id, loaded.get(id) ?? []);
+            }
+          }
+
+          // A newer snapshot may have overtaken this one while the rosters loaded.
+          if (cancelled || turn !== latest) {
+            return;
+          }
+
+          setStats(
+            computeStats(
+              snapshot.docs
+                .map((scored) => readScoredMatch(scored, rosters))
+                .filter((match): match is ScoredMatch => !!match),
+            ),
+          );
+        };
+
+        void run().catch((error) => console.error("Statistics failed to load", error));
+      },
+      (error) => console.error("Statistics unavailable", error),
+    );
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [user]);
+
+  return stats;
 };
 
 // Counts everyone registered to receive notifications for the selected table,

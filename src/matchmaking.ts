@@ -109,6 +109,9 @@ export type MatchDisposition = {
 const RED = { color: "Red", colorHex: "#d32f2f" };
 const BLUE = { color: "Blue", colorHex: "#1976d2" };
 
+export const teamColorHex = (color: string): string =>
+  color === RED.color ? RED.colorHex : BLUE.colorHex;
+
 // Splits the first `size` joined players (in join order) into two colored teams.
 // 1v1 (size 2): one solo player per color, who plays the whole table.
 // 2v2 (size 4): each color gets a front (attack) and a back (defense).
