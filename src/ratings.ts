@@ -6,8 +6,15 @@ import type { MatchDisposition, MatchScore, MatchSize, TeamPosition } from "./ma
 // tweak to the formula re-rates every past game for free.
 
 export const START_RATING = 1000;
-// How far one game can move a rating: an even match is worth half of this.
+// How far one 1v1 game can move a rating: an even match is worth half of this.
 export const K_FACTOR = 32;
+// A 2v2 moves each player's rating this much of what a 1v1 would. Its result is only
+// partly down to any one player, so it says less about them; but partners change from
+// game to game and results are scarce, so it is discounted rather than halved.
+export const DOUBLES_WEIGHT = 0.75;
+
+export const kFactorFor = (size: MatchSize): number =>
+  size === 4 ? K_FACTOR * DOUBLES_WEIGHT : K_FACTOR;
 // Scored games before a player is ranked. Until then the rating is still shown, but a
 // handful of results says little and would let a 1–0 newcomer top the table.
 export const PROVISIONAL_GAMES = 10;
@@ -81,10 +88,11 @@ export const formatDelta = (delta: number): string =>
 export const expectedScore = (own: number, other: number): number =>
   1 / (1 + 10 ** ((other - own) / 400));
 
-// Points a side rated `own` gains (or, negative, loses) against one rated `other`. The
-// other side moves by the same amount the opposite way.
-export const ratingDelta = (own: number, other: number, won: boolean): number =>
-  Math.round(K_FACTOR * ((won ? 1 : 0) - expectedScore(own, other)));
+// Points each player on a side rated `own` gains (or, negative, loses) against one rated
+// `other`, in a match of the given size. The other side moves by the same amount the
+// opposite way.
+export const ratingDelta = (own: number, other: number, won: boolean, size: MatchSize): number =>
+  Math.round(kFactorFor(size) * ((won ? 1 : 0) - expectedScore(own, other)));
 
 export const teamAverage = (ratings: number[]): number =>
   ratings.length === 0
@@ -191,7 +199,8 @@ const isRateable = ({ teams: [red, blue] }: ScoredMatch): boolean => {
 
 // Replays the scored matches in the order they were played. A team's strength is the
 // average of its players, and both teammates move by the same amount, so a 1v1 and a 2v2
-// feed one shared rating. The margin of victory is ignored: 10–9 counts like 10–0.
+// feed one shared rating, with a 2v2 counting for a little less (DOUBLES_WEIGHT). The
+// margin of victory is ignored: 10–9 counts like 10–0.
 export const computeStats = (matches: ScoredMatch[]): RatingStats => {
   const byUid = new Map<string, PlayerStats>();
   const rated: Record<string, MatchRating> = {};
@@ -223,7 +232,7 @@ export const computeStats = (matches: ScoredMatch[]): RatingStats => {
     const redRating = teamAverage(red.players.map((player) => before[player.uid]));
     const blueRating = teamAverage(blue.players.map((player) => before[player.uid]));
     const redWon = match.score.red > match.score.blue;
-    const redDelta = ratingDelta(redRating, blueRating, redWon);
+    const redDelta = ratingDelta(redRating, blueRating, redWon, match.size);
     rated[match.sessionId] = { ...match, before, delta: [redDelta, -redDelta] };
 
     const sides = [

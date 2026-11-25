@@ -4,9 +4,9 @@
 // function load them as they are.
 import { buildMatchDisposition, isValidScore, type MatchPlayer } from "../../src/matchmaking.js";
 import {
-  K_FACTOR,
   PROVISIONAL_GAMES,
   START_RATING,
+  kFactorFor,
   matchesFor,
   parseResultTeams,
   tableStandings,
@@ -169,7 +169,7 @@ export const buildWeeklyRecap = (
     .sort((a, b) => b.gain - a.gain || a.name.localeCompare(b.name));
 
   const surprise = matches
-    .filter((match) => winnerGain(match) > K_FACTOR / 2)
+    .filter((match) => winnerGain(match) > kFactorFor(match.size) / 2)
     .sort((a, b) => winnerGain(b) - winnerGain(a))[0];
   const side = (match: MatchRating, index: number) => ({
     names: match.teams[index].players.map((player) => nameOf(player.uid)),

@@ -580,7 +580,9 @@ export const recordMatchResult = async (
     teamAverage(team.players.map((entry) => ratingOf(stats, entry.player.uid))),
   );
   const redDelta =
-    stats && disposition ? ratingDelta(red, blue, score.red > score.blue) : undefined;
+    stats && disposition
+      ? ratingDelta(red, blue, score.red > score.blue, disposition.size)
+      : undefined;
 
   await updateDoc(doc(db, "sessions", sessionId), {
     result: {

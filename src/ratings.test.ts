@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   ACTIVE_DAYS,
+  DOUBLES_WEIGHT,
+  K_FACTOR,
   PROVISIONAL_GAMES,
   START_RATING,
   bestPartner,
   computeStats,
   expectedScore,
   isActive,
+  kFactorFor,
   matchesFor,
   parseResultTeams,
   ratingChangeSince,
+  ratingDelta,
   ratingOf,
   teamAverage,
   toughestOpponent,
@@ -115,10 +119,35 @@ describe("computeStats ratings", () => {
   it("rates a 2v2 on the team average and moves both teammates equally", () => {
     const stats = computeStats([doubles(["ada", "bo"], ["cy", "di"], 10, 7)]);
 
-    expect(ratingOf(stats, "ada")).toBe(START_RATING + 16);
-    expect(ratingOf(stats, "bo")).toBe(START_RATING + 16);
-    expect(ratingOf(stats, "cy")).toBe(START_RATING - 16);
-    expect(ratingOf(stats, "di")).toBe(START_RATING - 16);
+    // An even 2v2 is worth three quarters of an even 1v1's 16 points.
+    expect(ratingOf(stats, "ada")).toBe(START_RATING + 12);
+    expect(ratingOf(stats, "bo")).toBe(START_RATING + 12);
+    expect(ratingOf(stats, "cy")).toBe(START_RATING - 12);
+    expect(ratingOf(stats, "di")).toBe(START_RATING - 12);
+  });
+
+  it("moves ratings less in a 2v2 than in a 1v1 between the same ratings", () => {
+    expect(kFactorFor(2)).toBe(K_FACTOR);
+    expect(kFactorFor(4)).toBe(K_FACTOR * DOUBLES_WEIGHT);
+
+    // Even sides, then a favourite winning, then an underdog winning.
+    expect(ratingDelta(1000, 1000, true, 2)).toBe(16);
+    expect(ratingDelta(1000, 1000, true, 4)).toBe(12);
+    expect(ratingDelta(1200, 1000, true, 2)).toBe(8);
+    expect(ratingDelta(1200, 1000, true, 4)).toBe(6);
+    expect(ratingDelta(1000, 1200, true, 2)).toBe(24);
+    expect(ratingDelta(1000, 1200, true, 4)).toBe(18);
+  });
+
+  it("keeps a match zero-sum whatever its size", () => {
+    for (const size of [2, 4] as const) {
+      expect(ratingDelta(1100, 1000, true, size) + ratingDelta(1000, 1100, false, size)).toBe(0);
+    }
+
+    const { delta } = Object.values(
+      computeStats([doubles(["ada", "bo"], ["cy", "di"], 3, 10)]).matches,
+    )[0];
+    expect(delta).toEqual([-12, 12]);
   });
 
   it("replays matches in the order they were played, whatever order they arrive in", () => {
