@@ -6,6 +6,7 @@ import {
   useActiveSession,
   useAuth,
   useNotifications,
+  usePendingResult,
   useRecentSessions,
   useSessionPlayers,
   useTableMemberCount,
@@ -122,18 +123,9 @@ export default function App() {
   );
   const isAdmin = !!user?.email && adminEmails.includes(user.email.toLowerCase());
 
-  // A match the signed-in user started, played out, and hasn't scored yet. It outlives the
-  // normal session lifecycle so the creator can still log it once the cooldown lapses.
-  const pendingResult = useMemo(
-    () =>
-      recentSessions.find(
-        (session) =>
-          session.startedBy === user?.uid &&
-          !session.result &&
-          session.playerCount >= session.targetPlayers,
-      ) ?? null,
-    [recentSessions, user],
-  );
+  // A match the signed-in user played in that hasn't been scored yet. It outlives the
+  // normal session lifecycle so a player can still log it once the cooldown lapses.
+  const pendingResult = usePendingResult(user, recentSessions);
 
   const selectedTableName =
     visited.find((table) => table.code === selectedTable)?.name ||

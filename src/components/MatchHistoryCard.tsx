@@ -80,8 +80,8 @@ export const MatchHistoryCard = ({ tableCode, sessions, stats, currentUid }: Pro
         </Unrated>
       )}
       <Hint>
-        Ratings are what each player held going into the match. Only the player who started a
-        match can log its score.
+        Ratings are what each player held going into the match. Anyone who played in a match
+        can log its score.
       </Hint>
     </Card>
   );

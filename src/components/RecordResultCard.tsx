@@ -84,8 +84,15 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
     try {
       await recordMatchResult(user, session.id, tableCode, score, disposition);
     } catch (error) {
+      // The rules accept only the first score, so a refusal here usually means another
+      // player in the match logged it a moment ago; this card then goes away by itself.
+      const refused = (error as { code?: unknown } | null)?.code === "permission-denied";
       const message = error instanceof Error ? error.message : String(error);
-      setStatus(`Couldn't save the result: ${message}`);
+      setStatus(
+        refused
+          ? "This match already has a score — someone else may have just logged it."
+          : `Couldn't save the result: ${message}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -140,7 +147,7 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
       </Row>
       <Hint>
         {status ||
-          `You started this match — log the final score when you're done. Games run to ${WINNING_GOALS}.`}
+          `You played in this match — anyone in it can log the final score, once. Games run to ${WINNING_GOALS}.`}
       </Hint>
     </OutlinedCard>
   );

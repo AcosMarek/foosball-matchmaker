@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import {
   collection,
@@ -11,7 +11,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { getSessionRosters, registerOnTable } from "./api";
+import { getSessionDisposition, getSessionRosters, registerOnTable } from "./api";
 import { registerForPush } from "./push";
 import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
 import {
@@ -196,6 +196,72 @@ export const useRecentSessions = (selectedTable: string): Session[] => {
   }, [selectedTable]);
 
   return sessions;
+};
+
+// The most recent filled match the user played in that still has no score, or null.
+// Anyone in the match may log it, so being its starter is only the shortcut: for other
+// matches the lineup is looked up, once per match, to see whether the user was in one of
+// the teams (someone who joined after it filled is in the queue, not the match).
+export const usePendingResult = (user: User | null, sessions: Session[]): Session | null => {
+  const [playedIn, setPlayedIn] = useState<Record<string, boolean>>({});
+  const requested = useRef(new Set<string>());
+  const uid = user?.uid ?? null;
+
+  const unscored = useMemo(
+    () =>
+      sessions.filter(
+        (session) => !session.result && session.playerCount >= session.targetPlayers,
+      ),
+    [sessions],
+  );
+
+  // Another account on the same device has played different matches.
+  const account = useRef(uid);
+  useEffect(() => {
+    account.current = uid;
+    requested.current = new Set();
+    setPlayedIn({});
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid) {
+      return;
+    }
+
+    for (const session of unscored) {
+      if (session.startedBy === uid || requested.current.has(session.id)) {
+        continue;
+      }
+
+      // An answer is kept unless the account changed meanwhile. It is deliberately not
+      // dropped when a newer session snapshot arrives: the lookup isn't repeated, so a
+      // dropped answer would hide the prompt for good.
+      requested.current.add(session.id);
+      getSessionDisposition(session.id, session.targetPlayers)
+        .then((disposition) => {
+          if (account.current !== uid) {
+            return;
+          }
+          if (!disposition) {
+            // The roster came back short of a full match; ask again on the next snapshot.
+            requested.current.delete(session.id);
+            return;
+          }
+
+          const played = disposition.teams.some((team) =>
+            team.players.some((entry) => entry.player.uid === uid),
+          );
+          setPlayedIn((current) => ({ ...current, [session.id]: played }));
+        })
+        .catch((error) => {
+          // Leave it unrequested so the next snapshot tries again.
+          requested.current.delete(session.id);
+          console.error("Couldn't check the match lineup", error);
+        });
+    }
+  }, [uid, unscored]);
+
+  return unscored.find((session) => session.startedBy === uid || playedIn[session.id]) ?? null;
 };
 
 // A scored session as a rateable match. Results recorded before teams were stored fall

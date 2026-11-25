@@ -13,10 +13,15 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
-    function isOwnResult() {
+    // Anyone who joined the match may log its score, signed with their own uid. Join docs
+    // are keyed {sessionId}_{uid}, so membership is a single lookup. The first score
+    // stands: once a result exists nobody can overwrite it, which matters now that more
+    // than one person is able to write it.
+    function isValidResult(sessionId) {
       let result = request.resource.data.result;
       // A finished game is exactly one side on 10 with the other below it.
-      return resource.data.startedBy == request.auth.uid
+      return !('result' in resource.data)
+        && exists(/databases/$(database)/documents/sessionJoins/$(sessionId + '_' + request.auth.uid))
         && result.recordedBy == request.auth.uid
         && result.red is int && result.blue is int
         && result.red >= 0 && result.blue >= 0
@@ -48,10 +53,10 @@ service cloud.firestore {
       allow create: if isSignedIn();
       // Two distinct updates: the "game on" claim plus the join counter (the transaction
       // on this doc is what serialises simultaneous joins), and the final score, which
-      // only the player who started the match may write.
+      // any player in the match may write once.
       allow update: if isSignedIn() && (
         changesOnly(['readyNotifiedAt', 'playerCount', 'expiredNotifiedAt'])
-        || (changesOnly(['result']) && isOwnResult())
+        || (changesOnly(['result']) && isValidResult(sessionId))
       );
     }
 

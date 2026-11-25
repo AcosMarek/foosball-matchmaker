@@ -417,8 +417,9 @@ export const getSessionDisposition = async (
 ): Promise<MatchDisposition | null> =>
   buildMatchDisposition(await readSessionPlayers(sessionId), targetPlayers);
 
-// Only the player who started the match may log its score; the rules enforce that too,
-// so a tampered client can't write someone else's result. The teams are stored with the
+// Any player in the match may log its score, and only the first one counts; the rules
+// enforce both, so a tampered client can't score a match it wasn't in or overwrite a
+// result. The teams are stored with the
 // score (who played where, by uid) so ratings never have to guess them from the join
 // order later; `lineup` stays as the readable summary. Slack is best-effort.
 export const recordMatchResult = async (
