@@ -15,6 +15,7 @@ import {
   SUPPORTED_PLAYER_COUNTS,
   canStartMatch,
   fillWindowRemaining,
+  joinLinkMatches,
   matchPhase,
   matchSizeLabel,
   type MatchSize,
@@ -60,6 +61,11 @@ type Props = {
   activeSession: Session | null;
   sessionPlayers: JoinedPlayer[];
   stats: RatingStats | null;
+  // Set when the app was opened through Slack's "Jump in" button: when that post went
+  // out, in ms. The card then joins the match it was posted for, once, and reports back
+  // through `onAutoJoinDone` whether or not there was anything to join.
+  autoJoinStamp: number | null;
+  onAutoJoinDone: () => void;
 };
 
 export const MatchmakingCard = ({
@@ -69,6 +75,8 @@ export const MatchmakingCard = ({
   activeSession,
   sessionPlayers,
   stats,
+  autoJoinStamp,
+  onAutoJoinDone,
 }: Props) => {
   const [feedback, setFeedback] = useState("");
   const [joinedSessionId, setJoinedSessionId] = useState("");
@@ -217,6 +225,37 @@ export const MatchmakingCard = ({
       setFeedback("You're in, but the alert couldn't be posted.");
     }
   };
+
+  // Opened through Slack's "Jump in": join without a second tap. Waits until the match
+  // and its roster have loaded, since both arrive a moment after the page does and the
+  // roster is what says whether this player is already in. The flag is spent on the first
+  // verdict either way: joined, or nothing to join (a different match, a full or timed-out
+  // one, or already in it), in which case the table simply opens as usual.
+  const rosterLoaded = sessionPlayers.length > 0;
+  const linkedSessionId =
+    autoJoinStamp !== null &&
+    activeSession &&
+    joinLinkMatches(autoJoinStamp, activeSession.startedAt)
+      ? activeSession.id
+      : "";
+  const autoJoin = useRef({ handleJoin, onAutoJoinDone, spent: false });
+  autoJoin.current.handleJoin = handleJoin;
+  autoJoin.current.onAutoJoinDone = onAutoJoinDone;
+  useEffect(() => {
+    if (autoJoinStamp === null || !user || !activeSession || autoJoin.current.spent) {
+      return;
+    }
+    if (linkedSessionId && !rosterLoaded) {
+      return;
+    }
+
+    // Marked before anything else so that no second run of this effect can join twice.
+    autoJoin.current.spent = true;
+    autoJoin.current.onAutoJoinDone();
+    if (linkedSessionId && canJoin) {
+      void autoJoin.current.handleJoin();
+    }
+  }, [autoJoinStamp, user, activeSession, linkedSessionId, rosterLoaded, canJoin]);
 
   return (
     <Card>

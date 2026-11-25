@@ -220,6 +220,38 @@ export const reminderDueIn = (filledAt: Date, now: Date = new Date()): number =>
 export const RESET_MINUTES = 5;
 const RESET_MS = RESET_MINUTES * MS_PER_MINUTE;
 
+// ---- "Jump in" links ----
+// The match-start post in Slack links to the table with `join=<seconds>`, the time the
+// post went out. Opening the app through it joins that match without a second tap. The
+// time does two jobs: it lets the link go stale, and it ties the link to one match.
+
+const SECOND_MS = 1000;
+// A post goes out moments after its match is created, on a different clock from the one
+// that stamped the match. These bound how far apart the two times may be.
+const JOIN_LINK_EARLY_MS = 60 * SECOND_MS;
+const JOIN_LINK_LATE_MS = 2 * MS_PER_MINUTE;
+
+// The `join` value of a link as a time in ms, or null when it is missing, malformed, from
+// the future, or older than any match could still be filling.
+export const parseJoinStamp = (raw: string | null, now: Date = new Date()): number | null => {
+  if (!raw || !/^\d{9,11}$/.test(raw)) {
+    return null;
+  }
+
+  const stamp = Number(raw) * SECOND_MS;
+  const age = now.getTime() - stamp;
+
+  return age >= -JOIN_LINK_EARLY_MS && age <= RESET_MS + JOIN_LINK_LATE_MS ? stamp : null;
+};
+
+// Whether a join link was posted for the match that started at `startedAt`, as opposed
+// to an earlier or later one on the same table.
+export const joinLinkMatches = (stamp: number, startedAt: Date): boolean => {
+  const lag = stamp - startedAt.getTime();
+
+  return lag >= -JOIN_LINK_EARLY_MS && lag <= JOIN_LINK_LATE_MS;
+};
+
 export type MatchPhase = "filling" | "ready" | "expired";
 
 // Time (ms) left in the fill window before an unfilled match resets.

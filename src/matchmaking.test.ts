@@ -6,15 +6,56 @@ import {
   fillWindowRemaining,
   isValidScore,
   isValidTableCode,
+  joinLinkMatches,
   joinOutcome,
   matchPhase,
   mergeRoster,
   normalizeTableCode,
+  parseJoinStamp,
   reminderDueIn,
   resultDeadline,
   resultWindowRemaining,
   scoreWinner,
 } from "./matchmaking";
+
+describe("jump-in links", () => {
+  const now = new Date("2026-03-01T12:00:00.000Z");
+  const secondsAgo = (seconds: number) => String(Math.floor(now.getTime() / 1000) - seconds);
+
+  it("reads a fresh stamp as a time", () => {
+    expect(parseJoinStamp(secondsAgo(0), now)).toBe(now.getTime());
+    expect(parseJoinStamp(secondsAgo(240), now)).toBe(now.getTime() - 240_000);
+  });
+
+  it("lets the link go stale once the match can no longer be filling", () => {
+    // Five minutes to fill, plus two of slack between the two clocks.
+    expect(parseJoinStamp(secondsAgo(7 * 60), now)).not.toBeNull();
+    expect(parseJoinStamp(secondsAgo(7 * 60 + 1), now)).toBeNull();
+    expect(parseJoinStamp(secondsAgo(60 * 60), now)).toBeNull();
+  });
+
+  it("ignores anything that isn't a plausible stamp", () => {
+    for (const raw of [null, "", "1", "yes", "12345", "-1795600000", "1795600000.5", "1e9"]) {
+      expect(parseJoinStamp(raw, now)).toBeNull();
+    }
+    // Further in the future than a slow clock explains.
+    expect(parseJoinStamp(secondsAgo(-61), now)).toBeNull();
+    expect(parseJoinStamp(secondsAgo(-30), now)).not.toBeNull();
+  });
+
+  it("ties a link to the match it was posted for", () => {
+    const startedAt = new Date("2026-03-01T11:58:00.000Z");
+    const posted = (secondsAfterStart: number) => startedAt.getTime() + secondsAfterStart * 1000;
+
+    expect(joinLinkMatches(posted(3), startedAt)).toBe(true);
+    expect(joinLinkMatches(posted(120), startedAt)).toBe(true);
+    expect(joinLinkMatches(posted(-60), startedAt)).toBe(true);
+    // A link from the match before, or for one started later, is not for this match.
+    expect(joinLinkMatches(posted(121), startedAt)).toBe(false);
+    expect(joinLinkMatches(posted(-61), startedAt)).toBe(false);
+    expect(joinLinkMatches(posted(-10 * 60), startedAt)).toBe(false);
+  });
+});
 
 describe("score logging window", () => {
   const startedAt = new Date("2026-03-01T12:00:00.000Z");

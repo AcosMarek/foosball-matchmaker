@@ -31,6 +31,10 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
   turn there, and the teams are stored on the session so they can't shift mid-game
 - Any player in a match can log its score or cancel it, for an hour after it started;
   players are nudged by push if no score is in 15 minutes after the match filled
+- Slack's "Jump in" button joins the match in one tap: its link carries `join=<time the
+  post went out>`, and the app, opened through it by a signed-in player, joins the match
+  that post was for. The flag is dropped from the address at once, goes stale when the
+  match can no longer be filling, and never joins a different match
 - Slack posts carry the players' ratings: on start and join, in the lineup when a match
   fills (with team averages), and as the change each player's rating took from a result
 - Weekly Slack recap per table (`api/recap.ts`, run by the Vercel cron in `vercel.json`

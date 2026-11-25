@@ -116,12 +116,20 @@ describe("slack payload", () => {
     expect(labelFor("expired")).toBe("Start a new match");
   });
 
-  it("deep links back to the table", () => {
-    const button = blocksOf(buildSlackPayload(APP_URL, "MG3586", "start", "hi", []))
-      .find((block) => block.type === "actions")
-      ?.elements?.[0];
+  const buttonUrl = (event: string, nowMs?: number) =>
+    blocksOf(buildSlackPayload(APP_URL, "MG3586", event, "hi", [], nowMs)).find(
+      (block) => block.type === "actions",
+    )?.elements?.[0].url;
 
-    expect(button?.url).toBe("https://foosball-matchmaker.web.app/?table=MG3586");
+  it("deep links back to the table", () => {
+    expect(buttonUrl("ready")).toBe("https://foosball-matchmaker.web.app/?table=MG3586");
+    expect(buttonUrl("expired")).toBe("https://foosball-matchmaker.web.app/?table=MG3586");
+  });
+
+  it("makes the match-start button a join link stamped with when it was posted", () => {
+    expect(buttonUrl("start", 1_795_600_000_999)).toBe(
+      "https://foosball-matchmaker.web.app/?table=MG3586&join=1795600000",
+    );
   });
 
   it("renders a 2v2 as two side-by-side columns with a legend", () => {

@@ -129,12 +129,18 @@ const rosterField = (team: Roster) => ({
 
 // A `url` button needs no action_id and no interactivity request URL — Slack just opens
 // the link. The plain `text` stays as the notification fallback.
+//
+// The "Jump in" button of a match-start post also carries `join`, the time it was posted
+// (in seconds). The app takes that as an instruction to join the match straight away, and
+// uses the time to tell this match from a later one, so a button pressed on an old post
+// only opens the table. `nowMs` is a parameter for the tests' sake.
 export const buildSlackPayload = (
   appUrl: string,
   tableCode: string,
   event: string,
   text: string,
   roster: Roster[],
+  nowMs: number = Date.now(),
 ) => {
   const body = escapeSlack(text);
 
@@ -164,7 +170,9 @@ export const buildSlackPayload = (
       {
         type: "button",
         text: { type: "plain_text", text: label },
-        url: `${appUrl}/?table=${encodeURIComponent(tableCode)}`,
+        url: `${appUrl}/?table=${encodeURIComponent(tableCode)}${
+          event === "start" ? `&join=${Math.floor(nowMs / 1000)}` : ""
+        }`,
         style: "primary",
       },
     ],

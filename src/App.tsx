@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { isValidTableCode, normalizeTableCode } from "./matchmaking";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { isValidTableCode, normalizeTableCode, parseJoinStamp } from "./matchmaking";
 import { getTable, leaveTable, registerOnTable } from "./api";
 import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
 import {
@@ -52,6 +52,11 @@ const storedTable = (): string => {
   }
 };
 
+// Set when the app was opened through Slack's "Jump in" button: the time that post went
+// out, in ms. Null for any other way in, and for a link too old to mean anything.
+const joinStampFromSearch = (): number | null =>
+  parseJoinStamp(new URLSearchParams(window.location.search).get("join"));
+
 // Prefer a table provided via the URL; otherwise restore the last selected one.
 const initialTable = (): string => tableFromSearch() || storedTable();
 
@@ -62,6 +67,23 @@ export default function App() {
   // The table this player has just left or been taken off, kept so they can be told and
   // offered a way back.
   const [departed, setDeparted] = useState<Departure | null>(null);
+  // A pending "jump in" from a Slack link. Held here, not in the address: the flag is
+  // taken off the address at once so that a reload or a restored tab can't join again.
+  const [autoJoin, setAutoJoin] = useState<number | null>(joinStampFromSearch);
+  // Whether this visit began with a live "Jump in" link, which stays true after the
+  // flag itself has been used up.
+  const cameToJoin = useRef(autoJoin !== null);
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("join")) {
+        url.searchParams.delete("join");
+        window.history.replaceState(window.history.state, "", url);
+      }
+    } catch {
+      // The address is a convenience; the app works without tidying it.
+    }
+  }, []);
   const activeSession = useActiveSession(selectedTable);
   const sessionPlayers = useSessionPlayers(user, activeSession?.id ?? null);
   const tableMemberCount = useTableMemberCount(user, selectedTable);
@@ -85,7 +107,20 @@ export default function App() {
     setSelectedTable((current) => (current === code ? "" : current));
     setDeparted({ table: { code, name }, left });
   };
-  useTableRegistration(user, selectedTable, (code) => handleDeparted(code, false));
+  useTableRegistration(user, selectedTable, (code) => {
+    // Pressing "Jump in" is a decision to play here, so it brings a player who had left
+    // the table back onto it instead of turning them away. Checked against how the visit
+    // began, not the flag: the flag may already have been spent on joining by the time
+    // the membership check comes back.
+    if (cameToJoin.current && user) {
+      void registerOnTable(user, code).catch((error) =>
+        console.error("Couldn't rejoin the table", error),
+      );
+      return;
+    }
+
+    handleDeparted(code, false);
+  });
 
   // Remember the last selected table so it is restored on the next visit.
   useEffect(() => {
@@ -263,6 +298,8 @@ export default function App() {
             activeSession={activeSession}
             sessionPlayers={sessionPlayers}
             stats={stats}
+            autoJoinStamp={autoJoin}
+            onAutoJoinDone={() => setAutoJoin(null)}
           />
 
           {justScored.session && (
