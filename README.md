@@ -8,6 +8,11 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 - Admin-only table creation with auto-generated 6-character table codes
 - QR code per table (`?table=ABC123`) for quick join flow
 - Register on table and receive browser notifications when a new matchmaking session starts
+- iPhone and iPad: iOS only delivers web push to a site added to the home screen, so
+  `public/manifest.json` and the PNG icons make the app installable there, and a hint
+  (`src/platform.ts`, `InstallPrompt`) walks iOS users through it. Nothing else sees the
+  hint. The manifest has no `start_url` on purpose: the installed app opens at the address
+  it was added from, which carries the table. Untested on a real device
 - Start a new matchmaking session or join active one
 - Enforces one new session start per table every 10 minutes
 - Elo ratings, computed in the browser from the scored matches (`src/ratings.ts`): one

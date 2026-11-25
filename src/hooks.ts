@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { getSessionDisposition, getSessionRosters, registerOnTable, remindToScore } from "./api";
+import { currentDevice, needsHomeScreenInstall } from "./platform";
 import { registerForPush } from "./push";
 import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
 import {
@@ -545,6 +546,51 @@ export const useNotifications = (
     dismissPrompt,
     silencePrompt,
   };
+};
+
+const INSTALL_PROMPT_KEY = "foosball:installPromptOff";
+
+// The "add this app to your home screen" hint for iPhones and iPads in a browser tab,
+// where notifications can't be turned on at all. `needed` is false on every other device
+// and once the app runs from the home screen, so none of this is ever seen there. Like
+// the notification prompt it opens on sign-in, "Got it" lasts until the next one and
+// "Don't remind me" is remembered; `show` reopens it from the bell.
+export const useInstallHint = (
+  user: User | null,
+): {
+  needed: boolean;
+  open: boolean;
+  show: () => void;
+  dismiss: () => void;
+  silence: () => void;
+} => {
+  const needed = useMemo(() => needsHomeScreenInstall(currentDevice()), []);
+  const [dismissed, setDismissed] = useState(true);
+  const uid = user?.uid ?? null;
+
+  useEffect(() => {
+    let silenced = false;
+    try {
+      silenced = localStorage.getItem(INSTALL_PROMPT_KEY) === "1";
+    } catch {
+      // Ignore storage being unavailable (e.g. private browsing).
+    }
+
+    setDismissed(!uid || silenced);
+  }, [uid]);
+
+  const show = useCallback(() => setDismissed(false), []);
+  const dismiss = useCallback(() => setDismissed(true), []);
+  const silence = useCallback(() => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(INSTALL_PROMPT_KEY, "1");
+    } catch {
+      // Ignore storage being unavailable (e.g. private browsing).
+    }
+  }, []);
+
+  return { needed, open: needed && !!user && !dismissed, show, dismiss, silence };
 };
 
 export const useNow = (active: boolean): number => {

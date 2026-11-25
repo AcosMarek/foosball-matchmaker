@@ -5,6 +5,7 @@ import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
 import {
   useActiveSession,
   useAuth,
+  useInstallHint,
   useNotifications,
   usePendingResults,
   useRecentSessions,
@@ -18,6 +19,7 @@ import {
 import type { FoosballTable } from "./types";
 import { AuthBar, SignInPanel } from "./components/AuthCard";
 import { AdminTableCard } from "./components/AdminTableCard";
+import { InstallPrompt } from "./components/InstallPrompt";
 import { NotificationPrompt } from "./components/NotificationPrompt";
 import { TableSelector } from "./components/TableSelector";
 import { MatchmakingCard } from "./components/MatchmakingCard";
@@ -59,6 +61,7 @@ export default function App() {
   const tableMemberCount = useTableMemberCount(user, selectedTable);
   const recentSessions = useRecentSessions(selectedTable);
   const notifications = useNotifications(user);
+  const installHint = useInstallHint(user);
   const stats = useRatingStats(user);
   // This table's leaderboard: the overall ratings of the people who have played here.
   const standings = useMemo(
@@ -80,6 +83,29 @@ export default function App() {
       // Ignore storage being unavailable (e.g. private browsing).
     }
   }, [selectedTable]);
+
+  // On an iPhone in a browser tab, keep the selected table in the address bar. Adding the
+  // site to the home screen saves the address it was added from, and the installed app
+  // starts with empty storage, so this is what lets it open on the right table. Left
+  // alone everywhere else, where the address never needs to change.
+  const keepTableInAddress = installHint.needed;
+  useEffect(() => {
+    if (!keepTableInAddress) {
+      return;
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      if (selectedTable) {
+        url.searchParams.set("table", selectedTable);
+      } else {
+        url.searchParams.delete("table");
+      }
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      // The address is a convenience; the app works without it.
+    }
+  }, [keepTableInAddress, selectedTable]);
 
   // Resolve a table chosen via deep link or restored from a previous visit: look it up
   // to capture its name and remember it, or clear the selection if the code is unknown.
@@ -148,6 +174,7 @@ export default function App() {
             user={user}
             permission={notifications.permission}
             onRequestNotifications={notifications.requestPermission}
+            onShowInstallHint={installHint.needed ? installHint.show : undefined}
             onOpenStats={selectedTable ? () => setStatsOpen(true) : undefined}
           />
         )}
@@ -159,6 +186,10 @@ export default function App() {
           onDismiss={notifications.dismissPrompt}
           onSilence={notifications.silencePrompt}
         />
+      )}
+
+      {installHint.open && (
+        <InstallPrompt onDismiss={installHint.dismiss} onSilence={installHint.silence} />
       )}
 
       {user && statsOpen && (

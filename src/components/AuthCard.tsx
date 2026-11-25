@@ -42,11 +42,15 @@ export const AuthBar = ({
   user,
   permission,
   onRequestNotifications,
+  onShowInstallHint,
   onOpenStats,
 }: {
   user: User;
   permission: NotificationState;
   onRequestNotifications: () => void;
+  // Only on an iPhone or iPad in a browser tab, where notifications can't be turned on
+  // until the app is on the home screen: the bell then explains how to put it there.
+  onShowInstallHint?: () => void;
   // Absent until a table is selected: statistics are per table.
   onOpenStats?: () => void;
 }) => {
@@ -56,8 +60,9 @@ export const AuthBar = ({
       : permission === "denied"
         ? "notifications_off"
         : "notifications";
-  const bellLabel =
-    permission === "granted"
+  const bellLabel = onShowInstallHint
+    ? "How to get notifications"
+    : permission === "granted"
       ? "Notifications on"
       : permission === "denied"
         ? "Notifications blocked"
@@ -77,8 +82,8 @@ export const AuthBar = ({
         type="button"
         title={bellLabel}
         aria-label={bellLabel}
-        disabled={permission !== "default"}
-        onClick={onRequestNotifications}
+        disabled={!onShowInstallHint && permission !== "default"}
+        onClick={onShowInstallHint ?? onRequestNotifications}
       >
         <Icon fill={permission === "granted" ? 1 : 0} aria-hidden>
           {bellIcon}
