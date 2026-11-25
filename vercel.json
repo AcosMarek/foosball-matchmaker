@@ -5,6 +5,9 @@
     },
     "api/recap.ts": {
       "maxDuration": 30
+    },
+    "api/members.ts": {
+      "maxDuration": 10
     }
   },
   "crons": [

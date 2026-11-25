@@ -6,6 +6,9 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 
 - Google authentication
 - Admin-only table creation with auto-generated 6-character table codes
+- Admin-only "who gets pinged" list per table (`api/members.ts`): everyone registered on
+  the table and whether a device of theirs is signed up for push. Only the server can see
+  both, and it answers only for accounts in the `admins` collection
 - QR code per table (`?table=ABC123`) for quick join flow
 - Register on table and receive browser notifications when a new matchmaking session starts
 - iPhone and iPad: iOS only delivers web push to a site added to the home screen, so

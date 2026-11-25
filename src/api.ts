@@ -43,6 +43,7 @@ import {
 import { balanceTeams, dispositionFromTeams } from "./teams";
 import { toDate } from "./utils";
 import type { FoosballTable } from "./types";
+import type { TableReach } from "../api/_lib/members";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
 
@@ -117,6 +118,30 @@ const sendNotification = async (
   const result = (await response.json().catch(() => ({}))) as { sent?: unknown };
 
   return typeof result.sent === "number" ? result.sent : 0;
+};
+
+// Admin-only: who a table's match alerts reach. Asked of the server, which is the only
+// place that can see both who is registered on the table and whose devices are signed up
+// for push; it answers only for accounts in the `admins` collection.
+export const getTableReach = async (user: User, tableCode: string): Promise<TableReach> => {
+  if (!PUSH_ENDPOINT) {
+    throw new Error("The notification sender isn't configured.");
+  }
+
+  // Lives next to the sender: …/api/send → …/api/members.
+  const response = await fetch(new URL("members", PUSH_ENDPOINT), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken: await user.getIdToken(), tableCode }),
+  });
+  if (response.status === 403) {
+    throw new Error("This account isn't listed as an admin on the server.");
+  }
+  if (!response.ok) {
+    throw new Error(`The server answered ${response.status}`);
+  }
+
+  return (await response.json()) as TableReach;
 };
 
 export const registerOnTable = async (user: User, tableCode: string): Promise<void> => {

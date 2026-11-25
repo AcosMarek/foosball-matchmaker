@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
-import { createTable, getTableSlackWebhook, isSlackWebhookUrl, setTableSlackWebhook } from "../api";
+import {
+  createTable,
+  getTableReach,
+  getTableSlackWebhook,
+  isSlackWebhookUrl,
+  setTableSlackWebhook,
+} from "../api";
 import {
   Badge,
   Eyebrow,
@@ -12,7 +18,9 @@ import {
   PrimaryButton,
   Row,
   TextButton,
+  TonalButton,
 } from "../ui";
+import type { TableReach } from "../../api/_lib/members";
 
 type Props = {
   user: User;
@@ -32,6 +40,55 @@ const GrowInput = styled(Input)`
   min-width: 0;
 `;
 
+const Members = styled.ul`
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+`;
+
+const Member = styled.li`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  & + & {
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+  }
+`;
+
+const Who = styled.span`
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  & small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+`;
+
+const Reach = styled.span<{ on: boolean }>`
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  color: ${(props) =>
+    props.on ? "var(--md-sys-color-primary)" : "var(--md-sys-color-on-surface-variant)"};
+`;
+
+const formatDay = (ms: number): string =>
+  new Date(ms).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+
 // Identify which hook is wired up without putting the secret back on screen.
 const webhookTail = (url: string): string => `…${url.slice(-6)}`;
 
@@ -42,11 +99,31 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
   const [savedWebhook, setSavedWebhook] = useState("");
   const [webhookStatus, setWebhookStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  // Who this table's alerts reach. Loaded on request, never on its own: it is a list of
+  // names, and most visits to this card are not about it.
+  const [reach, setReach] = useState<TableReach | null>(null);
+  const [reachStatus, setReachStatus] = useState("");
+  const [reachBusy, setReachBusy] = useState(false);
+
+  const loadReach = async () => {
+    setReachBusy(true);
+    setReachStatus("");
+    try {
+      setReach(await getTableReach(user, selectedTable));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReachStatus(`Couldn't load the list: ${message}`);
+    } finally {
+      setReachBusy(false);
+    }
+  };
 
   useEffect(() => {
     setWebhook("");
     setWebhookStatus("");
     setSavedWebhook("");
+    setReach(null);
+    setReachStatus("");
     if (!selectedTable) {
       return;
     }
@@ -174,6 +251,63 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
               : 'Add an Incoming Webhook to post matchmaking and "Game on!" alerts to a channel.'}
           </Hint>
           {webhookStatus && <Hint>{webhookStatus}</Hint>}
+        </Section>
+      )}
+
+      {selectedTable && (
+        <Section>
+          <Eyebrow>
+            <Icon size={16} aria-hidden>
+              notifications_active
+            </Icon>
+            Match alerts · {selectedTableName}
+            {reach && (
+              <Badge>
+                {reach.reachable} of {reach.registered} reached
+              </Badge>
+            )}
+          </Eyebrow>
+          <Row>
+            <TonalButton type="button" onClick={() => void loadReach()} disabled={reachBusy}>
+              <Icon aria-hidden>{reach ? "refresh" : "group"}</Icon>
+              {reach ? "Refresh" : "Show who gets pinged"}
+            </TonalButton>
+          </Row>
+          {reach && (
+            <>
+              <Hint>
+                {reach.registered === 0
+                  ? "Nobody is registered on this table yet."
+                  : `${reach.reachable} of the ${reach.registered} players registered here get a push when a match starts. "Off" means no device of theirs is signed up: they never turned notifications on, or the sign-up has expired. Whoever starts a match isn't pinged about it.`}
+              </Hint>
+              <Members>
+                {reach.members.map((member, index) => (
+                  <Member key={`${index}|${member.email}`}>
+                    <Who>
+                      {member.displayName}
+                      {member.email && <small>{member.email}</small>}
+                    </Who>
+                    <Reach
+                      on={member.devices > 0}
+                      title={
+                        member.lastRegistered
+                          ? `Last signed up ${formatDay(member.lastRegistered)}`
+                          : undefined
+                      }
+                    >
+                      <Icon size={18} fill={member.devices > 0 ? 1 : 0} aria-hidden>
+                        {member.devices > 0 ? "notifications_active" : "notifications_off"}
+                      </Icon>
+                      {member.devices === 0
+                        ? "Off"
+                        : `On · ${member.devices} device${member.devices === 1 ? "" : "s"}`}
+                    </Reach>
+                  </Member>
+                ))}
+              </Members>
+            </>
+          )}
+          {reachStatus && <Hint>{reachStatus}</Hint>}
         </Section>
       )}
     </OutlinedCard>
