@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildNudgePayload,
   buildRecapPayload,
   buildWeeklyRecap,
   formatWeek,
@@ -152,6 +153,47 @@ describe("weekly recap", () => {
     const payload = buildRecapPayload("", "OFFICE", "Office", recap, week);
 
     expect(payload.blocks.some((block) => block.type === "actions")).toBe(false);
+  });
+});
+
+describe("quiet-week nudge", () => {
+  // ada won on the 2nd and nothing was played in the recap week.
+  const stats = computeStats([
+    game("2026-11-02T10:00:00", solo("Red", "ada"), solo("Blue", "bo"), [10, 2]),
+  ]);
+  const textOf = (now: string): string => {
+    const payload = buildNudgePayload(APP_URL, "OFFICE", "Office", stats, lastFullWeek(at(now)))!;
+
+    return (payload.blocks[0] as { text: { text: string } }).text.text;
+  };
+
+  it("invites people to play without mentioning the quiet week", () => {
+    const payload = buildNudgePayload(APP_URL, "OFFICE", "Office <1>", stats, week)!;
+    const [head, actions] = payload.blocks as {
+      text?: { text: string };
+      elements?: { url: string; text: { text: string } }[];
+    }[];
+
+    expect(head.text?.text).toContain(":soccer:  *New week at Office &lt;1&gt;*\n");
+    expect(payload.text).toContain("New week at Office &lt;1&gt;. ");
+    expect(payload.text).not.toMatch(/no (games|matches)|nothing|quiet/i);
+    expect(actions.elements?.[0].text.text).toBe("Start a game");
+    expect(actions.elements?.[0].url).toBe("https://foosball-matchmaker.web.app/?table=OFFICE");
+  });
+
+  it("says something different each week, cycling through four messages", () => {
+    const mondays = ["2026-11-23", "2026-11-30", "2026-12-07", "2026-12-14", "2026-12-21"].map(
+      (day) => textOf(`${day}T09:00:00`),
+    );
+
+    expect(new Set(mondays.slice(0, 4)).size).toBe(4);
+    expect(mondays[4]).toBe(mondays[0]);
+    expect(mondays.filter((text) => text.includes("ADA")).length).toBe(2);
+  });
+
+  it("stays silent once nobody on the table has played for 60 days", () => {
+    expect(buildNudgePayload(APP_URL, "OFFICE", "Office", stats, lastFullWeek(at("2027-02-03T09:00:00")))).toBeNull();
+    expect(buildNudgePayload(APP_URL, "NOGAME", "Lobby", stats, week)).toBeNull();
   });
 });
 

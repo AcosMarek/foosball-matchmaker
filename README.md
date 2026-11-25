@@ -22,7 +22,8 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
   fills (with team averages), and as the change each player's rating took from a result
 - Weekly Slack recap per table (`api/recap.ts`, run by the Vercel cron in `vercel.json`
   every Monday 07:00 UTC): games played, most active player, biggest climber, upset of the
-  week and the top of the leaderboard. Weeks without a scored game are skipped. Setting
+  week and the top of the leaderboard. A week without a scored game gets a short invitation
+  to play instead, until nobody on the table has played for 60 days. Setting
   `CRON_SECRET` in Vercel is optional; when set, only the cron can call the endpoint
 
 ## Setup

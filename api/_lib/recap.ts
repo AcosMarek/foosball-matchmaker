@@ -265,6 +265,66 @@ const recapLines = (recap: WeeklyRecap): string[] => {
   return lines;
 };
 
+const tableButton = (appUrl: string, tableCode: string, label: string) =>
+  appUrl
+    ? [
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: { type: "plain_text", text: label },
+              url: `${appUrl}/?table=${encodeURIComponent(tableCode)}`,
+              style: "primary",
+            },
+          ],
+        },
+      ]
+    : [];
+
+type Leader = { name: string; rating: number };
+
+// What a quiet week gets instead of a recap: an invitation, never a remark that nothing
+// was played. One per week in turn, so two Mondays in a row don't read the same.
+const NUDGES: ((leader: Leader) => string)[] = [
+  ({ name, rating }) =>
+    `${name} is top of the table on ${rating}. Who's taking a shot at it this week?`,
+  () => "A game to 10 takes about ten minutes. Start one and the app rallies the players for you.",
+  ({ name, rating }) => `Ratings only move when you play, and ${name} (${rating}) is the one to beat.`,
+  () => "2v2 teams are balanced by rating, so every game is a close one. Who's in?",
+];
+
+// The Monday post for a table with no scored game last week, or null when nobody on its
+// leaderboard is active any more: a table that has gone quiet for good (no game in
+// ACTIVE_DAYS) is left in peace rather than nudged every week for ever.
+export const buildNudgePayload = (
+  appUrl: string,
+  tableCode: string,
+  tableName: string,
+  stats: RatingStats,
+  week: Week,
+) => {
+  const [top] = tableStandings(stats, tableCode, week.end);
+  if (!top) {
+    return null;
+  }
+
+  const turn = Math.floor(week.start.getTime() / (7 * DAY_MS)) % NUDGES.length;
+  const line = NUDGES[turn]({
+    name: escapeSlack(top.player.displayName),
+    rating: top.player.rating,
+  });
+  const title = `New week at ${escapeSlack(tableName)}`;
+
+  return {
+    text: `${title}. ${line}`,
+    blocks: [
+      { type: "section", text: { type: "mrkdwn", text: `:soccer:  *${title}*\n${line}` } },
+      ...tableButton(appUrl, tableCode, "Start a game"),
+    ],
+  };
+};
+
 // The Slack post. As with the match alerts, the plain `text` is the notification
 // fallback and the button is a `url` element that needs no interactivity endpoint.
 export const buildRecapPayload = (
@@ -296,21 +356,7 @@ export const buildRecapPayload = (
       { type: "section", text: { type: "mrkdwn", text: `:trophy:  *${title}*` } },
       { type: "section", text: { type: "mrkdwn", text: lines.join("\n") } },
       ...footnote,
-      ...(appUrl
-        ? [
-            {
-              type: "actions",
-              elements: [
-                {
-                  type: "button",
-                  text: { type: "plain_text", text: "Open table" },
-                  url: `${appUrl}/?table=${encodeURIComponent(tableCode)}`,
-                  style: "primary",
-                },
-              ],
-            },
-          ]
-        : []),
+      ...tableButton(appUrl, tableCode, "Open table"),
     ],
   };
 };

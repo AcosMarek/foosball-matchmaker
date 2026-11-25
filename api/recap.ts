@@ -7,6 +7,7 @@ import type { MatchPlayer } from "../src/matchmaking.js";
 import { computeStats, parseResultTeams, type ScoredMatch } from "../src/ratings.js";
 import { chunk } from "./_lib/pushFanout.js";
 import {
+  buildNudgePayload,
   buildRecapPayload,
   buildWeeklyRecap,
   lastFullWeek,
@@ -17,6 +18,7 @@ import {
 // Weekly Slack recap, run by the Vercel cron in vercel.json every Monday morning. For
 // each table with a Slack webhook it posts what happened there over the last full week:
 // games, most active player, biggest climber, upset of the week and the top of the table.
+// A week without a scored game gets a short invitation to play instead.
 //
 // Env vars (shared with api/send.ts):
 //   FIREBASE_SERVICE_ACCOUNT  — the service account JSON (required, secret)
@@ -159,20 +161,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         continue;
       }
 
+      const stored: unknown = (await db.collection("tables").doc(tableCode).get()).get("name");
+      const name = typeof stored === "string" && stored ? stored : tableCode;
+      // A week with games gets the recap; a quiet one gets an invitation to play instead,
+      // unless the table has been quiet so long that nobody is on its leaderboard.
       const recap = buildWeeklyRecap(stats, tableCode, week);
-      if (!recap) {
-        console.log(`recap: no scored games on ${tableCode} in the week of ${week.key}`);
+      const payload = recap
+        ? buildRecapPayload(appUrl, tableCode, name, recap, week)
+        : buildNudgePayload(appUrl, tableCode, name, stats, week);
+      if (!payload) {
+        console.log(`recap: ${tableCode} has no active players, nothing posted`);
         continue;
       }
-
-      const name: unknown = (await db.collection("tables").doc(tableCode).get()).get("name");
-      const payload = buildRecapPayload(
-        appUrl,
-        tableCode,
-        typeof name === "string" && name ? name : tableCode,
-        recap,
-        week,
-      );
       const response = await fetch(table.get("slackWebhookUrl") as string, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
