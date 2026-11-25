@@ -22,6 +22,7 @@ import {
 } from "../matchmaking";
 import { Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
 import type { RatingStats } from "../ratings";
+import { teamNamesFor } from "../teamNames";
 import { balanceTeams, dispositionFromTeams } from "../teams";
 import type { JoinedPlayer, Session } from "../types";
 import { MatchStatus } from "./MatchStatus";
@@ -307,6 +308,7 @@ export const MatchmakingCard = ({
         fillRemainingMs={fillRemainingMs}
         cooldownMs={cooldownMs}
         stats={stats}
+        teamNames={activeSession && targetPlayers === 4 ? teamNamesFor(activeSession.id) : null}
       />
       {feedback && <Hint>{feedback}</Hint>}
     </Card>

@@ -36,6 +36,16 @@ const Line = styled.p`
   animation: riseIn 0.4s ease-out 0.3s both;
 `;
 
+// The commentary on the match: the app's one-line take on what just happened.
+const Remark = styled.p`
+  margin: 0.35rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  font-style: italic;
+  color: var(--md-sys-color-on-surface);
+  animation: riseIn 0.4s ease-out 0.2s both;
+`;
+
 const RatingRow = styled.div`
   display: flex;
   align-items: center;
@@ -122,6 +132,8 @@ type Props = {
   // The match as the ratings see it. Null for the moment between the score landing and
   // the ratings catching up; the card shows the score meanwhile.
   match: MatchRating | null;
+  // The commentary line for this match, once the ratings include it.
+  note?: string;
   currentUid: string;
   onClose: () => void;
 };
@@ -130,7 +142,7 @@ type Props = {
 // winning side's colour, and for the winners their rating counting up. The losing side
 // gets the same card without the numbers: the leaderboard is there for anyone who wants
 // to see what the game cost them, and nobody needs it counted down in front of them.
-export const ResultCelebration = ({ session, match, currentUid, onClose }: Props) => {
+export const ResultCelebration = ({ session, match, note, currentUid, onClose }: Props) => {
   const result = session.result;
   const redWon = !!result && result.red > result.blue;
   const winner = redWon ? "Red" : "Blue";
@@ -220,6 +232,7 @@ export const ResultCelebration = ({ session, match, currentUid, onClose }: Props
         {" – "}
         <span style={redWon ? undefined : { color: winnerColor }}>{result.blue} Blue</span>
       </Score>
+      {note && <Remark>{note}</Remark>}
       {showRating ? (
         <>
           <Line>Nice win. Your rating</Line>

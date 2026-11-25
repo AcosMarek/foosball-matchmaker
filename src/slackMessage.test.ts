@@ -205,6 +205,39 @@ describe("slack payload", () => {
     );
   });
 
+  it("shows each side's made-up team name under its colour", () => {
+    const named = parseRoster([
+      { ...doubles[0], name: "The Back-Row Bandits" },
+      { ...doubles[1], name: "Spin City" },
+    ]);
+    const blocks = blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", named));
+
+    expect(blocks[1].fields?.[0].text).toBe(
+      ":red_circle:  *Red*\n_The Back-Row Bandits_\n:crossed_swords:  Alice\n:shield:  Bob",
+    );
+    expect(blocks[1].fields?.[1].text).toContain("_Spin City_");
+  });
+
+  it("treats a team name as decoration: escaped, capped, and dropped if it isn't text", () => {
+    const [hostile, missing] = parseRoster([
+      { ...doubles[0], name: `<!channel> ${"x".repeat(80)}` },
+      { ...doubles[1], name: 42 },
+    ]);
+    const text = blocksOf(
+      buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", [hostile, missing]),
+    )[1].fields?.[0].text;
+
+    expect(hostile.name).toHaveLength(40);
+    expect(text).toContain("&lt;!channel&gt;");
+    expect(missing.name).toBeUndefined();
+    // An underscore would cut the italics short, so such a name is shown plain.
+    const [plain] = parseRoster([{ ...doubles[0], name: "snake_case" }, doubles[1]]);
+    expect(
+      blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", [plain, doubles[1]]))[1]
+        .fields?.[0].text,
+    ).toContain("\nsnake_case\n");
+  });
+
   it("gives a 1v1 ratings but no average", () => {
     const rated = parseRoster([
       { color: "Red", players: [{ name: "Alice", position: "solo", rating: 1042 }] },

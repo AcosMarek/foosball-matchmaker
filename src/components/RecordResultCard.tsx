@@ -97,7 +97,7 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
       return;
     }
 
-    await close(() => recordMatchResult(user, session.id, tableCode, score, disposition, stats));
+    await close(() => recordMatchResult(user, session.id, tableCode, score, disposition, stats, session.startedAt));
   };
 
   // Saving a score and cancelling both close the match, and the rules let that happen

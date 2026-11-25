@@ -84,6 +84,15 @@ const TeamPlayers = styled.span`
   min-width: 0;
 `;
 
+// The side's made-up name for this match (see src/teamNames.ts).
+const Nick = styled.span`
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-style: italic;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
 const Average = styled.span`
   flex: none;
   font-size: 0.75rem;
@@ -100,9 +109,11 @@ type Props = {
   waiting: string[];
   // Null while ratings are loading or unavailable; the teams then show names only.
   stats: RatingStats | null;
+  // Made-up names for Red and Blue, for a 2v2; null for a 1v1.
+  teamNames: [string, string] | null;
 };
 
-export const DispositionAlert = ({ disposition, waiting, stats }: Props) => (
+export const DispositionAlert = ({ disposition, waiting, stats, teamNames }: Props) => (
   <Ready role="status">
     <ReadyHead>
       <Icon fill={1} aria-hidden>
@@ -117,6 +128,7 @@ export const DispositionAlert = ({ disposition, waiting, stats }: Props) => (
           <Team style={{ borderLeftColor: team.cssColor }}>
             <TeamName style={{ color: team.cssColor }}>{team.color}</TeamName>
             <TeamPlayers>
+              {teamNames && <Nick>{teamNames[teamIndex]}</Nick>}
               {team.players.map((entry, index) => (
                 <span key={entry.player.uid}>
                   {index > 0 && ", "}

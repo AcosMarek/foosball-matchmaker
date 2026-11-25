@@ -40,6 +40,8 @@ import {
   type RatedTeam,
   type RatingStats,
 } from "./ratings";
+import { commentaryForNew } from "./commentary";
+import { teamNamesFor } from "./teamNames";
 import { balanceTeams, dispositionFromTeams } from "./teams";
 import { toDate } from "./utils";
 import type { FoosballTable } from "./types";
@@ -62,6 +64,8 @@ export const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
 // to it; both are left out when ratings aren't available, and Slack then shows names only.
 type NotifyTeam = {
   color: string;
+  // The side's made-up name for the match, in a 2v2.
+  name?: string;
   players: { name: string; position: TeamPosition; rating?: number; delta?: number }[];
 };
 
@@ -80,9 +84,11 @@ const notifyTeams = (
   disposition: MatchDisposition | null,
   stats: RatingStats | null,
   redDelta?: number,
+  names?: [string, string],
 ): NotifyTeam[] =>
   (disposition?.teams ?? []).map((team, index) => ({
     color: team.color,
+    ...(names && disposition?.size === 4 ? { name: names[index] } : {}),
     players: team.players.map((entry) => ({
       name: entry.player.displayName,
       position: entry.position,
@@ -388,7 +394,7 @@ export const notifyJoin = async (
     recipients: recipients.map((player) => player.uid),
     tableCode,
     event: "ready",
-    teams: notifyTeams(disposition, stats),
+    teams: notifyTeams(disposition, stats, undefined, teamNamesFor(sessionId)),
   });
 };
 
@@ -573,6 +579,7 @@ export const recordMatchResult = async (
   score: MatchScore,
   disposition: MatchDisposition | null,
   stats: RatingStats | null = null,
+  startedAt: Date = new Date(),
 ): Promise<void> => {
   // Worked out before the write: once the result lands, the live ratings already include
   // it and "going into the match" can no longer be read off them.
@@ -583,6 +590,19 @@ export const recordMatchResult = async (
     stats && disposition
       ? ratingDelta(red, blue, score.red > score.blue, disposition.size)
       : undefined;
+
+  // The line of commentary this result will carry in the app, so Slack reads the same.
+  const remark =
+    stats && disposition
+      ? commentaryForNew(stats, {
+          sessionId,
+          tableCode,
+          startedAt,
+          size: disposition.size,
+          score,
+          teams: teamsFromDisposition(disposition),
+        })
+      : "";
 
   await updateDoc(doc(db, "sessions", sessionId), {
     result: {
@@ -596,7 +616,7 @@ export const recordMatchResult = async (
   });
 
   await sendNotification(user, {
-    message: `Full time — ${describeResult(score)}`,
+    message: `Full time — ${describeResult(score)}${remark ? ` ${remark}` : ""}`,
     tableCode,
     event: "result",
     teams: notifyTeams(disposition, stats, redDelta),

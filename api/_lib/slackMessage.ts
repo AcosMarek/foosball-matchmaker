@@ -1,7 +1,8 @@
 // `rating` is the Elo rating the player took into the match, and `delta` what a logged
 // result did to it. Both are optional: the app leaves them out while ratings are loading.
 export type RosterPlayer = { name: string; position: string; rating?: number; delta?: number };
-export type Roster = { color: string; players: RosterPlayer[] };
+// `name` is the side's made-up name for the match ("Spin City"), sent for a 2v2.
+export type Roster = { color: string; name?: string; players: RosterPlayer[] };
 
 // Slack shortcodes rather than literal emoji so rendering never depends on source encoding.
 const TEAM_ICON: Record<string, string> = { Red: ":red_circle:", Blue: ":large_blue_circle:" };
@@ -20,6 +21,7 @@ const CALL_TO_ACTION: Record<string, string> = {
 };
 
 const MAX_NAME_LENGTH = 60;
+const MAX_TEAM_NAME_LENGTH = 40;
 // Ratings start at 1000 and move at most 32 a game, so anything outside these bounds is
 // not a rating the app produced.
 const MAX_RATING = 5000;
@@ -46,7 +48,7 @@ export const parseRoster = (value: unknown): Roster[] => {
 
   const roster: Roster[] = [];
   for (const rawTeam of value) {
-    const team = rawTeam as { color?: unknown; players?: unknown };
+    const team = rawTeam as { color?: unknown; players?: unknown; name?: unknown };
     if (typeof team.color !== "string" || !TEAM_ICON[team.color] || !Array.isArray(team.players)) {
       return [];
     }
@@ -81,7 +83,10 @@ export const parseRoster = (value: unknown): Roster[] => {
     if (players.length === 0) {
       return [];
     }
-    roster.push({ color: team.color, players });
+    // A team name is decoration: anything that isn't a short string is simply left out.
+    const name =
+      typeof team.name === "string" ? team.name.trim().slice(0, MAX_TEAM_NAME_LENGTH) : "";
+    roster.push({ color: team.color, ...(name ? { name } : {}), players });
   }
 
   return roster;
@@ -120,6 +125,10 @@ const rosterField = (team: Roster) => ({
   type: "mrkdwn",
   text: [
     `${TEAM_ICON[team.color]}  *${escapeSlack(team.color)}*${teamAverageText(team)}`,
+    // Underscores would end the italics early, so a name containing one is shown plain.
+    ...(team.name
+      ? [team.name.includes("_") ? escapeSlack(team.name) : `_${escapeSlack(team.name)}_`]
+      : []),
     ...team.players.map(
       (player) =>
         `${POSITION_ICON[player.position]}  ${escapeSlack(player.name)}${ratingText(player)}`,

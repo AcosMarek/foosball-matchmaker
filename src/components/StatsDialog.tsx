@@ -182,6 +182,8 @@ type Props = {
   // This player's rated matches on every table, newest first.
   matches: MatchRating[];
   tableLabel: (tableCode: string) => string;
+  // Commentary per match, by session id.
+  notes: Record<string, string>;
   onClose: () => void;
 };
 
@@ -192,6 +194,7 @@ export const StatsDialog = ({
   tableName,
   matches,
   tableLabel,
+  notes,
   onClose,
 }: Props) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -325,6 +328,7 @@ export const StatsDialog = ({
                 matches={matches}
                 currentUid={player.uid}
                 tableLabel={tableLabel}
+                notes={notes}
                 pageSize={HISTORY_PAGE}
               />
             </HistoryScroll>

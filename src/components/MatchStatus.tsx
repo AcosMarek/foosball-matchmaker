@@ -117,6 +117,8 @@ type Props = {
   cooldownMs: number;
   // Null while ratings are loading or unavailable; the queue then shows names only.
   stats: RatingStats | null;
+  // Made-up names for the two sides of a 2v2; null otherwise.
+  teamNames: [string, string] | null;
 };
 
 export const MatchStatus = ({
@@ -131,6 +133,7 @@ export const MatchStatus = ({
   fillRemainingMs,
   cooldownMs,
   stats,
+  teamNames,
 }: Props) => {
   if (phase === "expired") {
     return (
@@ -210,7 +213,12 @@ export const MatchStatus = ({
       )}
 
       {disposition && (
-        <DispositionAlert disposition={disposition} waiting={waiting} stats={stats} />
+        <DispositionAlert
+          disposition={disposition}
+          waiting={waiting}
+          stats={stats}
+          teamNames={teamNames}
+        />
       )}
     </StatusBlock>
   );

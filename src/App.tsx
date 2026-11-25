@@ -30,6 +30,7 @@ import { MatchHistoryCard } from "./components/MatchHistoryCard";
 import { LeaderboardCard } from "./components/LeaderboardCard";
 import { StatsDialog } from "./components/StatsDialog";
 import { matchesFor, tableStandings } from "./ratings";
+import { matchCommentary } from "./commentary";
 import { RecordResultCard } from "./components/RecordResultCard";
 import { ResultCelebration } from "./components/ResultCelebration";
 import { QrCard } from "./components/QrCard";
@@ -98,6 +99,8 @@ export default function App() {
     [stats, selectedTable],
   );
   const [statsOpen, setStatsOpen] = useState(false);
+  // A line of commentary for every scored match, by session id.
+  const commentary = useMemo(() => (stats ? matchCommentary(stats) : {}), [stats]);
 
   // Puts a table out of sight on this device: off the list, deselected, and with a note
   // saying so. Used both when the player leaves and when the app finds, on opening the
@@ -274,6 +277,7 @@ export default function App() {
           tableName={selectedTableName}
           matches={stats ? matchesFor(stats, { uid: user.uid }) : []}
           tableLabel={(code) => visited.find((table) => table.code === code)?.name || code}
+          notes={commentary}
           onClose={() => setStatsOpen(false)}
         />
       )}
@@ -308,6 +312,7 @@ export default function App() {
               key={justScored.session.id}
               session={justScored.session}
               match={stats?.matches[justScored.session.id] ?? null}
+              note={commentary[justScored.session.id]}
               currentUid={user.uid}
               onClose={justScored.clear}
             />
@@ -336,6 +341,7 @@ export default function App() {
               tableCode={selectedTable}
               sessions={recentSessions}
               stats={stats}
+              notes={commentary}
               currentUid={user.uid}
             />
           )}

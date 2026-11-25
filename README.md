@@ -34,6 +34,12 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
   turn there, and the teams are stored on the session so they can't shift mid-game
 - Any player in a match can log its score or cancel it, for an hour after it started;
   players are nudged by push if no score is in 15 minutes after the match filled
+- Match commentary (`src/commentary.ts`): every scored match gets one line ("Nora's first
+  win. Remember the date."), worked out from the results and shown in the match history,
+  on the result card and in the Slack result post. 85 wordings across 13 kinds of remark,
+  used in rotation
+- Team names (`src/teamNames.ts`): each 2v2 gets two made-up names from a catalogue of
+  over 600, derived from the match id so the app and Slack agree without storing them
 - Slack's "Jump in" button joins the match in one tap: its link carries `join=<time the
   post went out>`, and the app, opened through it by a signed-in player, joins the match
   that post was for. The flag is dropped from the address at once, goes stale when the

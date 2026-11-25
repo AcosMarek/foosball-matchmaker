@@ -68,6 +68,15 @@ const Change = styled(Delta)`
   text-align: right;
 `;
 
+const Note = styled.p`
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  font-style: italic;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
 const More = styled(TextButton)`
   margin-top: 0.5rem;
 `;
@@ -92,6 +101,8 @@ type Props = {
   // Names the table in each entry; for lists that span tables.
   tableLabel?: (tableCode: string) => string;
   pageSize?: number;
+  // A line of commentary per match, by session id (see src/commentary.ts).
+  notes?: Record<string, string>;
 };
 
 // Rated results, a page at a time: each side with the rating its players took into the
@@ -101,6 +112,7 @@ export const RatedMatchList = ({
   currentUid,
   tableLabel,
   pageSize = DEFAULT_PAGE,
+  notes,
 }: Props) => {
   const [shown, setShown] = useState(pageSize);
   const hidden = matches.length - shown;
@@ -139,6 +151,7 @@ export const RatedMatchList = ({
                   </Side>
                 ))}
               </Sides>
+              {notes?.[match.sessionId] && <Note>{notes[match.sessionId]}</Note>}
             </MatchEntry>
           );
         })}
