@@ -14,6 +14,7 @@
       :root {
         --green: #386a20;
         --green-container: #b7f397;
+        --on-green: #d9f7c6;
         --on-green-container: #042100;
         --teal: #19686a;
         --ink: #191d17;
@@ -125,78 +126,60 @@
       /* ---- Body ---- */
       main {
         flex: 1;
-        padding: 9mm 16mm 10mm;
+        padding: 14mm 16mm 10mm;
         display: flex;
         flex-direction: column;
       }
 
+      /* The pitch is an easy break, not a contest: the headline and lead are written for
+         someone who has never played here, and the leaderboard is left to the footnote. */
       h1 {
         margin: 0;
-        font-size: 24pt;
-        line-height: 1.12;
+        font-size: 40pt;
+        line-height: 1.06;
         font-weight: 700;
-        letter-spacing: -0.015em;
+        letter-spacing: -0.02em;
         color: var(--ink);
       }
       h1 .accent {
+        display: block;
         color: var(--green);
       }
 
       .lead {
-        margin: 4mm 0 0;
-        font-size: 12pt;
-        line-height: 1.5;
+        margin: 5mm 0 0;
+        font-size: 14pt;
+        line-height: 1.45;
         color: var(--ink-soft);
         max-width: 172mm;
       }
 
-      /* ---- How it works (single column) ---- */
-      .how {
-        margin-top: 8mm;
-      }
-      .how h2 {
-        margin: 0 0 4mm;
-        font-size: 10.5pt;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: var(--green);
-      }
-      .steps {
+      /* ---- Three reasons to play ---- */
+      .reasons {
         list-style: none;
-        margin: 0;
+        margin: 13mm 0 0;
         padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 3.5mm;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4mm;
       }
-      .step {
-        display: flex;
-        align-items: center;
-        gap: 5mm;
+      .reason {
         background: var(--bg);
         border-radius: 4mm;
-        padding: 4mm 6mm;
+        padding: 6mm 5mm 7mm;
       }
-      .step .num {
-        flex: none;
-        width: 9.5mm;
-        height: 9.5mm;
-        border-radius: 50%;
-        background: var(--green);
-        color: var(--white);
-        font-weight: 700;
-        font-size: 13pt;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .reason svg {
+        display: block;
+        width: 8mm;
+        height: 8mm;
+        color: var(--green);
       }
-      .step .title {
-        margin: 0 0 0.8mm;
-        font-size: 12pt;
+      .reason .title {
+        margin: 2.5mm 0 1mm;
+        font-size: 12.5pt;
         font-weight: 700;
       }
-      .step .desc {
+      .reason .desc {
         font-size: 10.5pt;
         line-height: 1.4;
         color: var(--ink-soft);
@@ -204,22 +187,23 @@
 
       /* ---- QR call-to-action panel ---- */
       .qr-panel {
-        margin-top: 9mm;
-        background: var(--green-container);
+        margin-top: 12mm;
+        background: var(--green);
         border-radius: 5mm;
-        padding: 7mm;
+        padding: 9mm;
         display: flex;
         align-items: center;
-        gap: 7mm;
+        gap: 9mm;
       }
+      /* As large as the page allows: the code is the one thing that has to work from a
+         few steps away. */
       .qr-box {
         flex: none;
-        width: 44mm;
-        height: 44mm;
+        width: 74mm;
+        height: 74mm;
         background: var(--white);
         border-radius: 3mm;
-        padding: 2.5mm;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        padding: 3mm;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -230,21 +214,40 @@
         object-fit: contain;
         display: block;
       }
+      .qr-cta {
+        color: var(--on-green);
+      }
       .qr-cta .big {
-        font-size: 21pt;
+        font-size: 34pt;
         font-weight: 700;
-        color: var(--on-green-container);
-        line-height: 1.1;
+        color: var(--white);
+        line-height: 1.05;
+        letter-spacing: -0.01em;
       }
       .qr-cta .sub {
-        margin-top: 2.5mm;
-        font-size: 11pt;
-        color: #1c3a10;
+        margin-top: 3mm;
+        font-size: 12pt;
+        line-height: 1.4;
+      }
+      .qr-cta .chips {
+        list-style: none;
+        margin: 5mm 0 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2mm;
+      }
+      .qr-cta .chips li {
+        padding: 1.2mm 4mm;
+        border-radius: 9999px;
+        background: var(--green-container);
+        color: var(--on-green-container);
+        font-size: 10.5pt;
+        font-weight: 600;
       }
       .qr-cta .table-line {
         margin-top: 5mm;
         font-size: 11pt;
-        color: #1c3a10;
       }
       .qr-cta .table-line .code {
         display: inline-block;
@@ -254,18 +257,27 @@
         letter-spacing: 0.06em;
         padding: 1mm 3mm;
         border-radius: 2mm;
-        background: rgba(255, 255, 255, 0.7);
+        background: var(--white);
         color: var(--on-green-container);
       }
 
-      .closer {
-        margin-top: 9mm;
-        font-size: 11.5pt;
+      /* ---- Footnote for the players who do want to keep score ---- */
+      .footnote {
+        margin-top: auto;
+        padding-top: 5mm;
+        border-top: 1.5px solid var(--outline);
+        display: flex;
+        align-items: center;
+        gap: 3.5mm;
+        font-size: 10.5pt;
+        line-height: 1.4;
         color: var(--ink-soft);
       }
-      .closer strong {
+      .footnote svg {
+        flex: none;
+        width: 6.5mm;
+        height: 6.5mm;
         color: var(--green);
-        font-weight: 700;
       }
 
       @media print {
@@ -278,6 +290,8 @@
         }
         .page {
           box-shadow: none;
+          /* Fills the sheet so the footnote stays at the bottom, as on screen. */
+          height: 297mm;
           min-height: auto;
         }
       }
@@ -312,38 +326,37 @@
       </header>
 
       <main>
-        <h1>Up for a <span class="accent">game of foosball?</span></h1>
+        <h1>Got ten minutes? <span class="accent">Grab a game.</span></h1>
         <p class="lead">
-          Foosball Matchmaker rounds up players for a game at this table — scan to start a match or
-          jump into one that's filling up, and everyone here gets pinged when it's on.
+          Scan the code and the app rounds up players for you. Never played? Perfect. Everyone's
+          welcome at this table.
         </p>
 
-        <section class="how">
-          <h2>How it works</h2>
-          <ol class="steps">
-            <li class="step">
-              <div class="num">1</div>
-              <div>
-                <div class="title">Scan the code</div>
-                <div class="desc">Point your phone camera at the QR — no app to install.</div>
-              </div>
-            </li>
-            <li class="step">
-              <div class="num">2</div>
-              <div>
-                <div class="title">Sign in &amp; you're on this table</div>
-                <div class="desc">Continue with Google — you land straight on this table.</div>
-              </div>
-            </li>
-            <li class="step">
-              <div class="num">3</div>
-              <div>
-                <div class="title">Start or jump in</div>
-                <div class="desc">Tap New 1v1 or 2v2 and everyone at the table gets pinged — or jump into a game that's filling up.</div>
-              </div>
-            </li>
-          </ol>
-        </section>
+        <ul class="reasons">
+          <li class="reason">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9 10h.01M15 10h.01M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+            </svg>
+            <div class="title">All levels welcome</div>
+            <div class="desc">Teams are mixed so beginners and regulars end up on both sides.</div>
+          </li>
+          <li class="reason">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 10h12v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-4zM16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3" />
+            </svg>
+            <div class="title">A proper break</div>
+            <div class="desc">A game takes about ten minutes. You're back before the coffee's cold.</div>
+          </li>
+          <li class="reason">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="9" cy="7" r="4" />
+              <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85" />
+            </svg>
+            <div class="title">Meet your colleagues</div>
+            <div class="desc">Play with the people you only know from Slack.</div>
+          </li>
+        </ul>
 
         <section class="qr-panel">
           <div class="qr-box">
@@ -351,15 +364,29 @@
           </div>
           <div class="qr-cta">
             <div class="big">Scan to play</div>
-            <div class="sub">Point your phone camera at the code</div>
+            <div class="sub">
+              No app to install. Sign in with Google, tap Jump in, and you get a ping when the game
+              is on.
+            </div>
+            <ol class="chips">
+              <li>1 Scan</li>
+              <li>2 Sign in</li>
+              <li>3 Jump in</li>
+            </ol>
             <div class="table-line" id="table-line">
               Table <span class="code" data-table-code>&mdash;</span>
             </div>
           </div>
         </section>
 
-        <p class="closer">
-          Your next game is <strong>one scan away.</strong>
+        <p class="footnote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 6h2a2 2 0 0 1 0 4h-2M7 6H5a2 2 0 0 0 0 4h2" />
+          </svg>
+          <span>
+            Like keeping score? The app also tracks ratings and a leaderboard for those who want
+            bragging rights.
+          </span>
         </p>
       </main>
 
