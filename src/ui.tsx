@@ -103,6 +103,66 @@ export const GlobalStyles = () => (
         }
       }
 
+      /* The two teams of a full match arrive from opposite sides. */
+      @keyframes slideInLeft {
+        from {
+          opacity: 0;
+          transform: translateX(-110%);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(110%);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes popIn {
+        from {
+          opacity: 0;
+          transform: scale(0);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @keyframes riseIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* One piece of confetti: thrown from its start point along its own --dx/--dy,
+         spinning by --spin, and gone by the time it lands. */
+      @keyframes confetti {
+        from {
+          opacity: 1;
+          transform: translate(0, 0) rotate(0);
+        }
+        to {
+          opacity: 0;
+          transform: translate(var(--dx), var(--dy)) rotate(var(--spin));
+        }
+      }
+
+      /* Everything above is decoration: with reduced motion each animation lands on its
+         last frame at once, so content appears in place and the confetti is never seen. */
       @media (prefers-reduced-motion: reduce) {
         *,
         *::before,

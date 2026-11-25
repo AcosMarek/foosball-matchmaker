@@ -6,6 +6,7 @@ import {
   useActiveSession,
   useAuth,
   useInstallHint,
+  useJustScored,
   useNotifications,
   usePendingResults,
   useRecentSessions,
@@ -28,6 +29,7 @@ import { LeaderboardCard } from "./components/LeaderboardCard";
 import { StatsDialog } from "./components/StatsDialog";
 import { matchesFor, tableStandings } from "./ratings";
 import { RecordResultCard } from "./components/RecordResultCard";
+import { ResultCelebration } from "./components/ResultCelebration";
 import { QrCard } from "./components/QrCard";
 
 const STORAGE_KEY = "foosball:selectedTable";
@@ -154,6 +156,7 @@ export default function App() {
   // normal session lifecycle, so a player can still log one after the cooldown lapses or
   // a new match has started, for up to an hour.
   const pendingResults = usePendingResults(user, recentSessions);
+  const justScored = useJustScored(pendingResults, recentSessions);
   useScoreReminders(user, selectedTable, recentSessions);
 
   const selectedTableName =
@@ -224,6 +227,16 @@ export default function App() {
             sessionPlayers={sessionPlayers}
             stats={stats}
           />
+
+          {justScored.session && (
+            <ResultCelebration
+              key={justScored.session.id}
+              session={justScored.session}
+              match={stats?.matches[justScored.session.id] ?? null}
+              currentUid={user.uid}
+              onClose={justScored.clear}
+            />
+          )}
 
           {pendingResults.map((session) => (
             <RecordResultCard

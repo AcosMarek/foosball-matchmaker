@@ -300,6 +300,42 @@ export const usePendingResults = (user: User | null, sessions: Session[]): Sessi
   );
 };
 
+// The match whose score has just come in, for a player who was waiting on it: a session
+// that was among their pending results and now has one. Only a change seen happening
+// counts, so opening the app on an already-scored match celebrates nothing. Whoever
+// logged the score and the other players, who see it arrive, are treated alike.
+export const useJustScored = (
+  pending: Session[],
+  sessions: Session[],
+): { session: Session | null; clear: () => void } => {
+  const waiting = useRef(new Set<string>());
+  const [scoredId, setScoredId] = useState("");
+
+  useEffect(() => {
+    const scored = sessions.find((session) => session.result && waiting.current.has(session.id));
+    for (const session of sessions) {
+      if (session.result || session.cancelled) {
+        waiting.current.delete(session.id);
+      }
+    }
+    for (const session of pending) {
+      waiting.current.add(session.id);
+    }
+
+    if (scored) {
+      setScoredId(scored.id);
+    }
+  }, [pending, sessions]);
+
+  const clear = useCallback(() => setScoredId(""), []);
+  const session = useMemo(
+    () => sessions.find((entry) => entry.id === scoredId && entry.result) ?? null,
+    [sessions, scoredId],
+  );
+
+  return { session, clear };
+};
+
 // Nudges a match's players to log their score once it has sat open for a while. Nothing
 // on the server runs on a timer, so, like the timed-out announcement, it is whichever
 // client has the table open that notices and asks the sender. The sender checks the match

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import styled from "@emotion/styled";
 import { ratingOf, teamAverage, type RatingStats } from "../ratings";
 import { Icon, Rating } from "../ui";
@@ -10,7 +11,11 @@ const Ready = styled.div`
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
   padding: 1rem 1.1rem;
+  /* The teams slide in from outside the card's edges. */
+  overflow: hidden;
 `;
+
+const SPRING = "cubic-bezier(0.2, 0.9, 0.3, 1.2)";
 
 const ReadyHead = styled.div`
   display: flex;
@@ -38,6 +43,28 @@ const Team = styled.div`
   color: var(--md-sys-color-on-surface);
   font-size: 0.875rem;
   line-height: 1.25rem;
+  /* The "game on" moment: Red arrives from the left and Blue from the right. It plays
+     when this card first appears, which is when the match fills (or the page opens on a
+     match that already has), and not again while the card stays on screen. */
+  animation: slideInLeft 0.55s ${SPRING} both;
+  &:last-of-type {
+    animation-name: slideInRight;
+    animation-delay: 0.15s;
+  }
+`;
+
+const Versus = styled.div`
+  justify-self: center;
+  margin: -0.15rem 0;
+  padding: 0.05rem 0.6rem;
+  border-radius: var(--md-shape-full);
+  background: var(--md-sys-color-on-primary-container);
+  color: var(--md-sys-color-primary-container);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  animation: popIn 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4) 0.55s both;
 `;
 
 const TeamName = styled.span`
@@ -49,6 +76,7 @@ const Waiting = styled.div`
   font-size: 0.8125rem;
   line-height: 1.125rem;
   color: var(--md-sys-color-on-primary-container);
+  animation: riseIn 0.4s ease-out 0.8s both;
 `;
 
 const TeamPlayers = styled.span`
@@ -83,30 +111,33 @@ export const DispositionAlert = ({ disposition, waiting, stats }: Props) => (
       {disposition.size === 2 ? "Heads up — 1v1 is on!" : "Teams are set — 2v2!"}
     </ReadyHead>
     <Teams>
-      {disposition.teams.map((team) => (
-        <Team key={team.color} style={{ borderLeftColor: team.colorHex }}>
-          <TeamName style={{ color: team.colorHex }}>{team.color}</TeamName>
-          <TeamPlayers>
-            {team.players.map((entry, index) => (
-              <span key={entry.player.uid}>
-                {index > 0 && ", "}
-                {describeTeamPlayer(entry)}
-                {stats && (
-                  <>
-                    {" "}
-                    <Rating>{ratingOf(stats, entry.player.uid)}</Rating>
-                  </>
-                )}
-              </span>
-            ))}
-          </TeamPlayers>
-          {stats && team.players.length > 1 && (
-            <Average>
-              avg{" "}
-              {teamAverage(team.players.map((entry) => ratingOf(stats, entry.player.uid)))}
-            </Average>
-          )}
-        </Team>
+      {disposition.teams.map((team, teamIndex) => (
+        <Fragment key={team.color}>
+          {teamIndex > 0 && <Versus aria-hidden>VS</Versus>}
+          <Team style={{ borderLeftColor: team.colorHex }}>
+            <TeamName style={{ color: team.colorHex }}>{team.color}</TeamName>
+            <TeamPlayers>
+              {team.players.map((entry, index) => (
+                <span key={entry.player.uid}>
+                  {index > 0 && ", "}
+                  {describeTeamPlayer(entry)}
+                  {stats && (
+                    <>
+                      {" "}
+                      <Rating>{ratingOf(stats, entry.player.uid)}</Rating>
+                    </>
+                  )}
+                </span>
+              ))}
+            </TeamPlayers>
+            {stats && team.players.length > 1 && (
+              <Average>
+                avg{" "}
+                {teamAverage(team.players.map((entry) => ratingOf(stats, entry.player.uid)))}
+              </Average>
+            )}
+          </Team>
+        </Fragment>
       ))}
     </Teams>
     {disposition.size === 4 && (
