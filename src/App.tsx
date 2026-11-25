@@ -6,7 +6,7 @@ import {
   useActiveSession,
   useAuth,
   useNotifications,
-  usePendingResult,
+  usePendingResults,
   useRecentSessions,
   useSessionPlayers,
   useTableMemberCount,
@@ -123,9 +123,10 @@ export default function App() {
   );
   const isAdmin = !!user?.email && adminEmails.includes(user.email.toLowerCase());
 
-  // A match the signed-in user played in that hasn't been scored yet. It outlives the
-  // normal session lifecycle so a player can still log it once the cooldown lapses.
-  const pendingResult = usePendingResult(user, recentSessions);
+  // Matches the signed-in user played in that haven't been scored yet. They outlive the
+  // normal session lifecycle, so a player can still log one after the cooldown lapses or
+  // a new match has started, for up to an hour.
+  const pendingResults = usePendingResults(user, recentSessions);
 
   const selectedTableName =
     visited.find((table) => table.code === selectedTable)?.name ||
@@ -191,9 +192,14 @@ export default function App() {
             stats={stats}
           />
 
-          {pendingResult && (
-            <RecordResultCard user={user} session={pendingResult} tableCode={selectedTable} />
-          )}
+          {pendingResults.map((session) => (
+            <RecordResultCard
+              key={session.id}
+              user={user}
+              session={session}
+              tableCode={selectedTable}
+            />
+          ))}
 
           {selectedTable && (
             <LeaderboardCard

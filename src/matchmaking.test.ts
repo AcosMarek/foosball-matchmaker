@@ -10,8 +10,30 @@ import {
   matchPhase,
   mergeRoster,
   normalizeTableCode,
+  resultDeadline,
+  resultWindowRemaining,
   scoreWinner,
 } from "./matchmaking";
+
+describe("score logging window", () => {
+  const startedAt = new Date("2026-03-01T12:00:00.000Z");
+  const minutesLater = (minutes: number) => new Date(startedAt.getTime() + minutes * 60_000);
+
+  it("stays open for an hour after the match started", () => {
+    expect(resultWindowRemaining(startedAt, startedAt)).toBe(60 * 60_000);
+    expect(resultWindowRemaining(startedAt, minutesLater(45))).toBe(15 * 60_000);
+    expect(resultWindowRemaining(startedAt, minutesLater(59.5))).toBe(30_000);
+  });
+
+  it("is closed from the hour onwards", () => {
+    expect(resultWindowRemaining(startedAt, minutesLater(60))).toBe(0);
+    expect(resultWindowRemaining(startedAt, minutesLater(60 * 24 * 30))).toBe(0);
+  });
+
+  it("puts the deadline an hour after the start", () => {
+    expect(resultDeadline(startedAt)).toEqual(minutesLater(60));
+  });
+});
 
 describe("table code handling", () => {
   it("normalizes and validates six character codes", () => {

@@ -81,7 +81,7 @@ export const MatchHistoryCard = ({ tableCode, sessions, stats, currentUid }: Pro
       )}
       <Hint>
         Ratings are what each player held going into the match. Anyone who played in a match
-        can log its score.
+        can log its score or cancel it, for an hour after it started.
       </Hint>
     </Card>
   );

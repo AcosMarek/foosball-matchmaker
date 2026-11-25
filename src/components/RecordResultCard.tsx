@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
 import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
-import { getSessionDisposition, recordMatchResult } from "../api";
+import { cancelMatch, getSessionDisposition, recordMatchResult } from "../api";
 import {
   WINNING_GOALS,
   isValidScore,
   matchSizeLabel,
+  resultDeadline,
   type MatchDisposition,
 } from "../matchmaking";
-import { Eyebrow, Hint, Icon, Input, OutlinedCard, PrimaryButton, Row } from "../ui";
+import {
+  Eyebrow,
+  Hint,
+  Icon,
+  Input,
+  OutlinedCard,
+  PrimaryButton,
+  Row,
+  TextButton,
+} from "../ui";
 import type { Session } from "../types";
 
 type Props = {
@@ -46,7 +56,10 @@ const ScoreInput = styled(Input)`
   font-variant-numeric: tabular-nums;
 `;
 
-const parseGoals = (value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
+const formatClock = (date: Date): string =>
+  date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+const parseGoals =(value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
 
 export const RecordResultCard = ({ user, session, tableCode }: Props) => {
   const [disposition, setDisposition] = useState<MatchDisposition | null>(null);
@@ -54,6 +67,8 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
   const [blue, setBlue] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  // Cancelling can't be undone, so it takes a second, explicit tap.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,19 +94,26 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
       return;
     }
 
+    await close(() => recordMatchResult(user, session.id, tableCode, score, disposition));
+  };
+
+  // Saving a score and cancelling both close the match, and the rules let that happen
+  // once, within the hour. A refusal usually means another player closed it a moment ago,
+  // or this device's clock runs behind and the hour is up; either way the card then goes
+  // away by itself.
+  const close = async (write: () => Promise<void>) => {
     setBusy(true);
     setStatus("");
     try {
-      await recordMatchResult(user, session.id, tableCode, score, disposition);
+      await write();
     } catch (error) {
-      // The rules accept only the first score, so a refusal here usually means another
-      // player in the match logged it a moment ago; this card then goes away by itself.
       const refused = (error as { code?: unknown } | null)?.code === "permission-denied";
       const message = error instanceof Error ? error.message : String(error);
+      setConfirmingCancel(false);
       setStatus(
         refused
-          ? "This match already has a score — someone else may have just logged it."
-          : `Couldn't save the result: ${message}`,
+          ? "Not saved — this match already has a score or was cancelled, or its hour is up."
+          : `Couldn't save: ${message}`,
       );
     } finally {
       setBusy(false);
@@ -104,8 +126,7 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
         <Icon size={16} aria-hidden>
           scoreboard
         </Icon>
-        Result · {matchSizeLabel(session.targetPlayers)} at{" "}
-        {session.startedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        Result · {matchSizeLabel(session.targetPlayers)} at {formatClock(session.startedAt)}
       </Eyebrow>
 
       {disposition && (
@@ -119,36 +140,72 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
         </Teams>
       )}
 
-      <Row>
-        <ScoreInput
-          type="number"
-          min={0}
-          max={WINNING_GOALS}
-          inputMode="numeric"
-          placeholder="Red"
-          aria-label="Red score"
-          value={red}
-          onChange={(event) => setRed(event.target.value)}
-        />
-        <ScoreInput
-          type="number"
-          min={0}
-          max={WINNING_GOALS}
-          inputMode="numeric"
-          placeholder="Blue"
-          aria-label="Blue score"
-          value={blue}
-          onChange={(event) => setBlue(event.target.value)}
-        />
-        <PrimaryButton type="button" onClick={() => void handleSubmit()} disabled={busy}>
-          <Icon aria-hidden>check</Icon>
-          Save result
-        </PrimaryButton>
-      </Row>
-      <Hint>
-        {status ||
-          `You played in this match — anyone in it can log the final score, once. Games run to ${WINNING_GOALS}.`}
-      </Hint>
+      {confirmingCancel ? (
+        <>
+          <Row>
+            <PrimaryButton
+              type="button"
+              onClick={() => void close(() => cancelMatch(user, session.id))}
+              disabled={busy}
+            >
+              <Icon aria-hidden>cancel</Icon>
+              Yes, cancel match
+            </PrimaryButton>
+            <TextButton type="button" onClick={() => setConfirmingCancel(false)} disabled={busy}>
+              Keep match
+            </TextButton>
+          </Row>
+          <Hint>
+            Cancel this match for everyone in it? No score is logged and nobody's rating
+            changes. It can't be undone.
+          </Hint>
+        </>
+      ) : (
+        <>
+          <Row>
+            <ScoreInput
+              type="number"
+              min={0}
+              max={WINNING_GOALS}
+              inputMode="numeric"
+              placeholder="Red"
+              aria-label="Red score"
+              value={red}
+              onChange={(event) => setRed(event.target.value)}
+            />
+            <ScoreInput
+              type="number"
+              min={0}
+              max={WINNING_GOALS}
+              inputMode="numeric"
+              placeholder="Blue"
+              aria-label="Blue score"
+              value={blue}
+              onChange={(event) => setBlue(event.target.value)}
+            />
+            <PrimaryButton type="button" onClick={() => void handleSubmit()} disabled={busy}>
+              <Icon aria-hidden>check</Icon>
+              Save result
+            </PrimaryButton>
+            <TextButton
+              type="button"
+              onClick={() => {
+                setStatus("");
+                setConfirmingCancel(true);
+              }}
+              disabled={busy}
+            >
+              Cancel match
+            </TextButton>
+          </Row>
+          <Hint>
+            {status ||
+              `You played in this match — anyone in it can log the final score or cancel it, once, until ${formatClock(
+                resultDeadline(session.startedAt),
+              )}. Games run to ${WINNING_GOALS}.`}
+          </Hint>
+        </>
+      )}
     </OutlinedCard>
   );
 };

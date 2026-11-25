@@ -13,15 +13,33 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
-    // Anyone who joined the match may log its score, signed with their own uid. Join docs
-    // are keyed {sessionId}_{uid}, so membership is a single lookup. The first score
-    // stands: once a result exists nobody can overwrite it, which matters now that more
-    // than one person is able to write it.
+    // Anyone who joined the match may close it, either with a score or by cancelling it.
+    // Join docs are keyed {sessionId}_{uid}, so membership is a single lookup. The first
+    // one to close it wins: once a match has a score or is cancelled nobody can change
+    // that, which matters now that more than one person is able to write it. A match can
+    // be closed for an hour after it started (the app's RESULT_WINDOW_MINUTES), so old
+    // games can't be logged late.
+    function canCloseMatch(sessionId) {
+      return !('result' in resource.data)
+        && !('cancelled' in resource.data)
+        && request.time < resource.data.startedAt + duration.value(1, 'h')
+        && exists(/databases/$(database)/documents/sessionJoins/$(sessionId + '_' + request.auth.uid));
+    }
+
+    // Cancelling records who did it and when, and nothing else.
+    function isValidCancel(sessionId) {
+      let cancelled = request.resource.data.cancelled;
+      return canCloseMatch(sessionId)
+        && cancelled.keys().hasOnly(['by', 'byName', 'at'])
+        && cancelled.by == request.auth.uid
+        && cancelled.byName is string && cancelled.byName.size() <= 100
+        && cancelled.at == request.time;
+    }
+
     function isValidResult(sessionId) {
       let result = request.resource.data.result;
       // A finished game is exactly one side on 10 with the other below it.
-      return !('result' in resource.data)
-        && exists(/databases/$(database)/documents/sessionJoins/$(sessionId + '_' + request.auth.uid))
+      return canCloseMatch(sessionId)
         && result.recordedBy == request.auth.uid
         && result.red is int && result.blue is int
         && result.red >= 0 && result.blue >= 0
@@ -51,12 +69,13 @@ service cloud.firestore {
     match /sessions/{sessionId} {
       allow read: if true;
       allow create: if isSignedIn();
-      // Two distinct updates: the "game on" claim plus the join counter (the transaction
-      // on this doc is what serialises simultaneous joins), and the final score, which
-      // any player in the match may write once.
+      // Three distinct updates: the "game on" claim plus the join counter (the transaction
+      // on this doc is what serialises simultaneous joins), the final score, and a
+      // cancellation. Any player in the match may write one of the last two, once.
       allow update: if isSignedIn() && (
         changesOnly(['readyNotifiedAt', 'playerCount', 'expiredNotifiedAt'])
         || (changesOnly(['result']) && isValidResult(sessionId))
+        || (changesOnly(['cancelled']) && isValidCancel(sessionId))
       );
     }
 

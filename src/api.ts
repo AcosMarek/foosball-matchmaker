@@ -417,9 +417,9 @@ export const getSessionDisposition = async (
 ): Promise<MatchDisposition | null> =>
   buildMatchDisposition(await readSessionPlayers(sessionId), targetPlayers);
 
-// Any player in the match may log its score, and only the first one counts; the rules
-// enforce both, so a tampered client can't score a match it wasn't in or overwrite a
-// result. The teams are stored with the
+// Any player in the match may log its score within an hour of its start, and only the
+// first one counts; the rules enforce all three, so a tampered client can't score a match
+// it wasn't in, overwrite a result, or log a game from long ago. The teams are stored with the
 // score (who played where, by uid) so ratings never have to guess them from the join
 // order later; `lineup` stays as the readable summary. Slack is best-effort.
 export const recordMatchResult = async (
@@ -445,4 +445,18 @@ export const recordMatchResult = async (
     tableCode,
     event: "result",
   }).catch(() => {});
+};
+
+// Calls a match off: someone had to leave, or there is no fair score to log. It then has
+// no result, so it never reaches the ratings, and it can't be scored afterwards. The same
+// people who may log the score may cancel, within the same hour; the rules enforce it and
+// keep who cancelled on the session.
+export const cancelMatch = async (user: User, sessionId: string): Promise<void> => {
+  await updateDoc(doc(db, "sessions", sessionId), {
+    cancelled: {
+      by: user.uid,
+      byName: displayNameOf(user).slice(0, 100),
+      at: serverTimestamp(),
+    },
+  });
 };

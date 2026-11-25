@@ -18,6 +18,7 @@ import {
   buildMatchDisposition,
   canStartMatch,
   isValidScore,
+  resultWindowRemaining,
   type RosterEntry,
 } from "./matchmaking";
 import {
@@ -56,6 +57,7 @@ const readSession = (snapshot: QueryDocumentSnapshot<DocumentData>): Session | n
           recordedAt: toDate(result.recordedAt),
         }
       : null,
+    cancelled: !!data.cancelled,
   };
 };
 
@@ -113,10 +115,12 @@ export const useActiveSession = (selectedTable: string): Session | null => {
         return;
       }
 
-      // A logged result ends the match, freeing the table for a new game rather than
-      // holding it until the start cooldown lapses.
+      // A logged result or a cancellation ends the match, freeing the table for a new
+      // game rather than holding it until the start cooldown lapses.
       setActiveSession(
-        session.result || canStartMatch(session.startedAt).allowed ? null : session,
+        session.result || session.cancelled || canStartMatch(session.startedAt).allowed
+          ? null
+          : session,
       );
     });
   }, [selectedTable]);
@@ -198,22 +202,46 @@ export const useRecentSessions = (selectedTable: string): Session[] => {
   return sessions;
 };
 
-// The most recent filled match the user played in that still has no score, or null.
-// Anyone in the match may log it, so being its starter is only the shortcut: for other
+// The filled matches the user played in that are still open (no score, not cancelled) and
+// young enough to log, oldest first. Usually one, but a new match started before the last one was logged
+// leaves two, and the earlier one must stay reachable while the later one is played.
+// Anyone in a match may log it, so being its starter is only the shortcut: for other
 // matches the lineup is looked up, once per match, to see whether the user was in one of
 // the teams (someone who joined after it filled is in the queue, not the match).
-export const usePendingResult = (user: User | null, sessions: Session[]): Session | null => {
+export const usePendingResults = (user: User | null, sessions: Session[]): Session[] => {
   const [playedIn, setPlayedIn] = useState<Record<string, boolean>>({});
+  const [now, setNow] = useState(() => Date.now());
   const requested = useRef(new Set<string>());
   const uid = user?.uid ?? null;
 
   const unscored = useMemo(
     () =>
-      sessions.filter(
-        (session) => !session.result && session.playerCount >= session.targetPlayers,
-      ),
-    [sessions],
+      sessions
+        .filter(
+          (session) =>
+            !session.result &&
+            !session.cancelled &&
+            session.playerCount >= session.targetPlayers &&
+            resultWindowRemaining(session.startedAt, new Date(now)) > 0,
+        )
+        .reverse(),
+    [sessions, now],
   );
+
+  // Re-filter the moment the oldest match's hour runs out, so its prompt goes away
+  // without waiting for a snapshot.
+  useEffect(() => {
+    if (unscored.length === 0) {
+      return;
+    }
+
+    const remainingMs = Math.min(
+      ...unscored.map((session) => resultWindowRemaining(session.startedAt)),
+    );
+    const timer = setTimeout(() => setNow(Date.now()), remainingMs);
+
+    return () => clearTimeout(timer);
+  }, [unscored]);
 
   // Another account on the same device has played different matches.
   const account = useRef(uid);
@@ -261,7 +289,10 @@ export const usePendingResult = (user: User | null, sessions: Session[]): Sessio
     }
   }, [uid, unscored]);
 
-  return unscored.find((session) => session.startedBy === uid || playedIn[session.id]) ?? null;
+  return useMemo(
+    () => unscored.filter((session) => session.startedBy === uid || playedIn[session.id]),
+    [unscored, uid, playedIn],
+  );
 };
 
 // A scored session as a rateable match. Results recorded before teams were stored fall

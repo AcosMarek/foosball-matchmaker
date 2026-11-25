@@ -195,6 +195,19 @@ export const describeScore = ({ red, blue }: MatchScore): string => `Red ${red} 
 export const describeResult = (score: MatchScore): string =>
   `${describeScore(score)} — ${scoreWinner(score)} wins.`;
 
+// A score can be logged for an hour after the match started. After that the match stays
+// unscored for good, so nobody is asked about (or can invent) a game from days ago. The
+// Firestore rules enforce the same hour.
+export const RESULT_WINDOW_MINUTES = 60;
+const RESULT_WINDOW_MS = RESULT_WINDOW_MINUTES * MS_PER_MINUTE;
+
+// Time (ms) left to log a match's score.
+export const resultWindowRemaining = (startedAt: Date, now: Date = new Date()): number =>
+  Math.max(0, RESULT_WINDOW_MS - (now.getTime() - startedAt.getTime()));
+
+export const resultDeadline = (startedAt: Date): Date =>
+  new Date(startedAt.getTime() + RESULT_WINDOW_MS);
+
 export const RESET_MINUTES = 5;
 const RESET_MS = RESET_MINUTES * MS_PER_MINUTE;
 

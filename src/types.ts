@@ -18,6 +18,8 @@ export type Session = {
   targetPlayers: MatchSize;
   playerCount: number;
   result: MatchResult | null;
+  // Called off by one of its players: it gets no score and changes nobody's rating.
+  cancelled: boolean;
 };
 
 export type JoinedPlayer = MatchPlayer & {
