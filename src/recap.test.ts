@@ -123,10 +123,22 @@ describe("weekly recap", () => {
     expect(calm.climber?.name).toBe("ADA");
   });
 
-  it("lists the top of the table, flagging provisional ratings", () => {
+  it("lists the top of the table, flagging ratings built on only a few games", () => {
     expect(recap.top).toHaveLength(3);
-    expect(recap.top.every((entry) => entry.provisional)).toBe(true);
     expect(recap.top[0].rating).toBeGreaterThanOrEqual(recap.top[1].rating);
+    // Ada, Bo and Cy head the table. Cy has played two games; the others well over three.
+    expect(recap.top.map((entry) => [entry.name, entry.isNew])).toEqual(
+      expect.arrayContaining([
+        ["CY", true],
+        ["ADA", false],
+      ]),
+    );
+
+    const payload = buildRecapPayload(APP_URL, "OFFICE", "Office", recap, week);
+    const footnote = payload.blocks.find((block) => block.type === "context") as
+      | { elements: { text: string }[] }
+      | undefined;
+    expect(footnote?.elements[0].text).toBe("† new: fewer than 3 scored games so far");
   });
 
   it("has nothing to say about a week without games", () => {

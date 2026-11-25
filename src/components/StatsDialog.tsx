@@ -1,11 +1,9 @@
 import { useEffect, useRef } from "react";
 import styled from "@emotion/styled";
 import {
-  PROVISIONAL_GAMES,
   START_RATING,
   bestPartner,
   formatDelta,
-  isProvisional,
   ratingChangeSince,
   toughestOpponent,
   winRate,
@@ -176,8 +174,8 @@ const record = (entry: Versus | null): string =>
 type Props = {
   // Null until this player has a scored game on any table.
   player: PlayerStats | null;
-  // Place on the selected table's leaderboard (null when provisional or not on it), out
-  // of `placedCount` ranked players there.
+  // Place on the selected table's leaderboard (null when not on it), out of the
+  // `placedCount` players listed there.
   place: number | null;
   placedCount: number;
   tableName: string;
@@ -204,7 +202,6 @@ export const StatsDialog = ({
 
   const since = new Date(Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000);
   const recentChange = player ? ratingChangeSince(player, since) : 0;
-  const gamesToRank = player ? PROVISIONAL_GAMES - player.games : 0;
 
   return (
     <Sheet
@@ -260,14 +257,7 @@ export const StatsDialog = ({
             </Metric>
             <Metric>
               <MetricLabel>Rank at {tableName}</MetricLabel>
-              {isProvisional(player) ? (
-                <MetricValue>
-                  –
-                  <MetricNote>
-                    {gamesToRank} more game{gamesToRank === 1 ? "" : "s"}
-                  </MetricNote>
-                </MetricValue>
-              ) : place === null ? (
+              {place === null ? (
                 <MetricValue>
                   –<MetricNote>not on this board</MetricNote>
                 </MetricValue>

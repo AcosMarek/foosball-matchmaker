@@ -3,12 +3,13 @@ import {
   ACTIVE_DAYS,
   DOUBLES_WEIGHT,
   K_FACTOR,
-  PROVISIONAL_GAMES,
+  NEW_PLAYER_GAMES,
   START_RATING,
   bestPartner,
   computeStats,
   expectedScore,
   isActive,
+  isNewPlayer,
   kFactorFor,
   matchesFor,
   parseResultTeams,
@@ -230,41 +231,58 @@ describe("ranking", () => {
   const season = (games: number): ScoredMatch[] =>
     Array.from({ length: games }, () => singles("ada", "bo", 10, 5));
 
-  it("leaves players unranked until they have enough games", () => {
-    const stats = computeStats(season(PROVISIONAL_GAMES - 1));
-
-    expect(stats.players.map((entry) => entry.rank)).toEqual([null, null]);
-  });
-
-  it("ranks established players by rating and lists provisional ones after them", () => {
-    const stats = computeStats([...season(PROVISIONAL_GAMES), singles("cy", "di", 10, 9)]);
+  it("ranks a player from their very first game", () => {
+    const stats = computeStats(season(1));
 
     expect(stats.players.map((entry) => [entry.uid, entry.rank])).toEqual([
       ["ada", 1],
       ["bo", 2],
-      ["cy", null],
-      ["di", null],
     ]);
+  });
+
+  it("ranks everyone by rating, however few games they have", () => {
+    const stats = computeStats([...season(SEASON_GAMES), singles("cy", "di", 10, 9)]);
+
+    // Cy's single win puts him above Di and above Bo, who has lost ten.
+    expect(stats.players.map((entry) => [entry.uid, entry.rank])).toEqual([
+      ["ada", 1],
+      ["cy", 2],
+      ["di", 3],
+      ["bo", 4],
+    ]);
+  });
+
+  it("marks a player as new for their first three games only", () => {
+    const find = (games: number) =>
+      computeStats(season(games)).players.find((entry) => entry.uid === "ada")!;
+
+    expect(NEW_PLAYER_GAMES).toBe(3);
+    expect(isNewPlayer(find(1))).toBe(true);
+    expect(isNewPlayer(find(2))).toBe(true);
+    expect(isNewPlayer(find(3))).toBe(false);
   });
 });
 
+// Enough games for a rating to have moved well away from the start.
+const SEASON_GAMES = 10;
+
 describe("across tables", () => {
   const season = [
-    ...Array.from({ length: PROVISIONAL_GAMES }, () => singles("ada", "bo", 10, 5, "OFFICE")),
-    ...Array.from({ length: PROVISIONAL_GAMES }, () => singles("cy", "di", 10, 5, "LOUNGE")),
+    ...Array.from({ length: SEASON_GAMES }, () => singles("ada", "bo", 10, 5, "OFFICE")),
+    ...Array.from({ length: SEASON_GAMES }, () => singles("cy", "di", 10, 5, "LOUNGE")),
     singles("ada", "di", 10, 5, "LOUNGE"),
     singles("eli", "bo", 10, 5, "OFFICE"),
   ];
 
   it("carries one rating from table to table", () => {
-    const home = computeStats(season.slice(0, PROVISIONAL_GAMES));
+    const home = computeStats(season.slice(0, SEASON_GAMES));
     const both = computeStats(season);
     const ada = both.players.find((entry) => entry.uid === "ada");
 
     // The away game at LOUNGE moved the same rating Ada built at OFFICE.
     expect(ada?.rating).toBeGreaterThan(ratingOf(home, "ada"));
     expect(ada?.tables).toEqual(["OFFICE", "LOUNGE"]);
-    expect(ada?.games).toBe(PROVISIONAL_GAMES + 1);
+    expect(ada?.games).toBe(SEASON_GAMES + 1);
   });
 
   const today = season[season.length - 1].startedAt;
@@ -274,15 +292,17 @@ describe("across tables", () => {
     const office = tableStandings(stats, "OFFICE", today);
     const lounge = tableStandings(stats, "LOUNGE", today);
 
+    // Eli has played once and won, which already puts him on the board, above Bo.
     expect(office.map((entry) => [entry.player.uid, entry.place])).toEqual([
       ["ada", 1],
-      ["bo", 2],
-      ["eli", null],
+      ["eli", 2],
+      ["bo", 3],
     ]);
     expect(lounge.map((entry) => entry.player.uid).sort()).toEqual(["ada", "cy", "di"]);
     expect(lounge.map((entry) => entry.place)).toEqual([1, 2, 3]);
-    // Overall, three players are ahead of Bo, whose place at OFFICE is still 2.
-    expect(stats.players.find((entry) => entry.uid === "bo")?.rank).toBe(4);
+    // Overall, players from the other table are ahead of Bo too, but his place at OFFICE
+    // counts only the three who play there.
+    expect(stats.players.find((entry) => entry.uid === "bo")?.rank).toBeGreaterThan(3);
   });
 
   it("returns the whole match history, newest first, by table or by player", () => {
@@ -291,12 +311,12 @@ describe("across tables", () => {
 
     expect(everything).toHaveLength(season.length);
     expect(everything[0].sessionId).toBe(season[season.length - 1].sessionId);
-    expect(matchesFor(stats, { tableCode: "LOUNGE" })).toHaveLength(PROVISIONAL_GAMES + 1);
-    expect(matchesFor(stats, { uid: "ada" })).toHaveLength(PROVISIONAL_GAMES + 1);
+    expect(matchesFor(stats, { tableCode: "LOUNGE" })).toHaveLength(SEASON_GAMES + 1);
+    expect(matchesFor(stats, { uid: "ada" })).toHaveLength(SEASON_GAMES + 1);
     // Ada's one away game is the only match that is both hers and at LOUNGE.
     expect(
       matchesFor(stats, { tableCode: "LOUNGE", uid: "ada" }).map((match) => match.sessionId),
-    ).toEqual([season[PROVISIONAL_GAMES * 2].sessionId]);
+    ).toEqual([season[SEASON_GAMES * 2].sessionId]);
   });
 
   it("has no standings for a table nobody has scored on", () => {
@@ -306,8 +326,8 @@ describe("across tables", () => {
 
 describe("activity", () => {
   const DAY_MS = 24 * 60 * 60 * 1000;
-  const early = Array.from({ length: PROVISIONAL_GAMES }, () => singles("ada", "bo", 10, 5));
-  const late = Array.from({ length: PROVISIONAL_GAMES }, () => singles("cy", "di", 10, 5));
+  const early = Array.from({ length: SEASON_GAMES }, () => singles("ada", "bo", 10, 5));
+  const late = Array.from({ length: SEASON_GAMES }, () => singles("cy", "di", 10, 5));
   const stats = computeStats([...early, ...late]);
   const lastEarly = early[early.length - 1].startedAt;
   const find = (uid: string) => stats.players.find((entry) => entry.uid === uid)!;

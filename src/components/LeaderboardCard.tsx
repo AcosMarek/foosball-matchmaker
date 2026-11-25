@@ -3,8 +3,8 @@ import styled from "@emotion/styled";
 import { prefersReducedMotion } from "../motion";
 import {
   ACTIVE_DAYS,
-  PROVISIONAL_GAMES,
-  isProvisional,
+  NEW_PLAYER_GAMES,
+  isNewPlayer,
   ratingChangeSince,
   type PlayerStats,
   type Standing,
@@ -46,15 +46,14 @@ const SmallAvatar = styled(Avatar)`
   font-size: 0.75rem;
 `;
 
-const Name = styled.span<{ muted: boolean }>`
+const Name = styled.span`
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.15rem 0.4rem;
   min-width: 0;
   flex: 1;
-  color: ${(props) =>
-    props.muted ? "var(--md-sys-color-on-surface-variant)" : "var(--md-sys-color-on-surface)"};
+  color: var(--md-sys-color-on-surface);
   & > :first-of-type {
     /* Never squeezed by the badge: on a narrow screen the badge drops below instead */
     flex: none;
@@ -72,37 +71,29 @@ const Record = styled.span`
   color: var(--md-sys-color-on-surface-variant);
 `;
 
-const Points = styled.span<{ muted: boolean }>`
+const Points = styled.span`
   flex: none;
   min-width: 2.6rem;
   text-align: right;
-  font-weight: ${(props) => (props.muted ? 400 : 600)};
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: ${(props) =>
-    props.muted ? "var(--md-sys-color-on-surface-variant)" : "var(--md-sys-color-on-surface)"};
+  color: var(--md-sys-color-on-surface);
 `;
 
 const Landing = styled(Place)`
   color: var(--md-sys-color-primary);
   font-weight: 600;
-  animation: dropIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) 0.9s both;
-`;
-
-const Falling = styled(Badge)`
-  animation: breakAway 0.7s cubic-bezier(0.5, 0, 0.9, 0.5) 0.4s both;
+  animation: dropIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) 0.5s both;
 `;
 
 const Welcome = styled(Hint)`
   color: var(--md-sys-color-primary);
   font-weight: 500;
-  animation: riseIn 0.5s ease-out 1.3s both;
+  animation: riseIn 0.5s ease-out 0.9s both;
 `;
 
 const SLIDE_MS = 650;
-const RANKED_SEEN_PREFIX = "foosball:rankedSeen:";
-// The ranked moment is for someone who has just got there. Anyone further past the
-// threshold than this was ranked long ago and is only marked as having seen it.
-const RANKED_FRESH_GAMES = 3;
+const WELCOMED_PREFIX = "foosball:welcomedOnBoard:";
 
 // Slides rows to their new places when the order changes, so an overtake is seen to
 // happen and the list doesn't simply reshuffle. Each row is moved back to where it was a
@@ -183,33 +174,34 @@ const useSlideOnReorder = (
   }, [list, orderKey, scope]);
 };
 
-// Whether to play the "you're ranked" moment: once per device, the first time the app
-// is opened with this player ranked, and only if that is news.
-const useRankedMoment = (uid: string, ranked: boolean, games: number): boolean => {
-  const [celebrating, setCelebrating] = useState(false);
+// Whether to play the welcome: once per device, the first time the app is opened with
+// this player on the board, and only while they are new. Someone who has been playing for
+// a while is quietly marked as welcomed instead.
+const useWelcomeMoment = (uid: string, onBoard: boolean, games: number): boolean => {
+  const [welcoming, setWelcoming] = useState(false);
 
   useEffect(() => {
-    if (!ranked) {
+    if (!onBoard) {
       return;
     }
 
     // If storage can't be read the moment is skipped, never repeated on every visit.
     let seen = true;
     try {
-      seen = localStorage.getItem(RANKED_SEEN_PREFIX + uid) === "1";
-      localStorage.setItem(RANKED_SEEN_PREFIX + uid, "1");
+      seen = localStorage.getItem(WELCOMED_PREFIX + uid) === "1";
+      localStorage.setItem(WELCOMED_PREFIX + uid, "1");
     } catch {
       // Ignore storage being unavailable (e.g. private browsing).
     }
 
-    if (!seen && games < PROVISIONAL_GAMES + RANKED_FRESH_GAMES) {
-      setCelebrating(true);
+    if (!seen && games <= NEW_PLAYER_GAMES) {
+      setWelcoming(true);
     }
-    // `games` is deliberately left out: it is read once, when the player turns ranked,
-    // and later games must not run this again.
-  }, [uid, ranked]);
+    // `games` is deliberately left out: it is read once, when the player first shows on
+    // the board, and later games must not run this again.
+  }, [uid, onBoard]);
 
-  return celebrating;
+  return welcoming;
 };
 
 const RECENT_DAYS = 30;
@@ -245,13 +237,7 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
   useSlideOnReorder(list, order, tableName);
 
   const own = standings?.find((entry) => entry.player.uid === currentUid);
-  const celebrating = useRankedMoment(
-    currentUid,
-    !!own && own.place !== null,
-    own?.player.games ?? 0,
-  );
-  // The badge is put back for the moment so it can fall off, then removed for good.
-  const [badgeGone, setBadgeGone] = useState(false);
+  const welcoming = useWelcomeMoment(currentUid, !!own, own?.player.games ?? 0);
 
   if (!standings) {
     return null;
@@ -274,45 +260,39 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
         <>
           <List ref={list}>
             {standings.map(({ player, place }) => {
-              const provisional = isProvisional(player);
-              const justRanked = celebrating && player.uid === currentUid;
+              const justArrived = welcoming && player.uid === currentUid;
 
               return (
                 <Entry key={player.uid} data-uid={player.uid} own={player.uid === currentUid}>
-                  {justRanked ? <Landing>{place}</Landing> : <Place>{place ?? "–"}</Place>}
+                  {justArrived ? <Landing>{place}</Landing> : <Place>{place}</Place>}
                   <SmallAvatar aria-hidden>
                     {player.displayName.trim().charAt(0).toUpperCase() || "?"}
                   </SmallAvatar>
-                  <Name muted={provisional}>
+                  <Name>
                     <span>
                       {player.displayName}
                       {player.uid === currentUid && " (you)"}
                     </span>
-                    {provisional && <Badge>Provisional</Badge>}
-                    {justRanked && !badgeGone && (
-                      <Falling aria-hidden onAnimationEnd={() => setBadgeGone(true)}>
-                        Provisional
-                      </Falling>
-                    )}
+                    {isNewPlayer(player) && <Badge>New</Badge>}
                   </Name>
                   <Record>
                     {player.games} · {player.wins}–{player.losses}
                   </Record>
-                  <Points muted={provisional}>{player.rating}</Points>
+                  <Points>{player.rating}</Points>
                   <Trend player={player} />
                 </Entry>
               );
             })}
           </List>
-          {celebrating && (
+          {welcoming && own && (
             <Welcome role="status">
-              {PROVISIONAL_GAMES} scored games. You're ranked — welcome to the board.
+              You're on the board at number {own.place}. Welcome to the table.
             </Welcome>
           )}
           <Hint>
-            Games · wins–losses · rating, counted across all tables. Ranked after{" "}
-            {PROVISIONAL_GAMES} scored games. Players with no game in the last {ACTIVE_DAYS} days
-            are hidden.
+            Games · wins–losses · rating, counted across all tables. "New" marks a player's
+            first {NEW_PLAYER_GAMES} scored games, while their rating is still settling.
+            Players with no game in the last {ACTIVE_DAYS} days are hidden.
           </Hint>
         </>
       )}

@@ -269,7 +269,7 @@ export default function App() {
         <StatsDialog
           player={stats?.players.find((player) => player.uid === user.uid) ?? null}
           place={standings?.find((entry) => entry.player.uid === user.uid)?.place ?? null}
-          placedCount={standings?.filter((entry) => entry.place !== null).length ?? 0}
+          placedCount={standings?.length ?? 0}
           tableName={selectedTableName}
           matches={stats ? matchesFor(stats, { uid: user.uid }) : []}
           tableLabel={(code) => visited.find((table) => table.code === code)?.name || code}

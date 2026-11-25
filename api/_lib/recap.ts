@@ -4,8 +4,9 @@
 // function load them as they are.
 import { buildMatchDisposition, isValidScore, type MatchPlayer } from "../../src/matchmaking.js";
 import {
-  PROVISIONAL_GAMES,
+  NEW_PLAYER_GAMES,
   START_RATING,
+  isNewPlayer,
   kFactorFor,
   matchesFor,
   parseResultTeams,
@@ -110,7 +111,8 @@ export type WeeklyRecap = {
     score: string;
   } | null;
   // The top of the table's leaderboard as it stands.
-  top: { name: string; rating: number; provisional: boolean }[];
+  // `isNew` marks a rating built on only a few games, which can still swing a lot.
+  top: { name: string; rating: number; isNew: boolean }[];
 };
 
 const MAX_NAMES = 3;
@@ -202,10 +204,10 @@ export const buildWeeklyRecap = (
     upset,
     top: tableStandings(stats, tableCode, week.end)
       .slice(0, TOP_PLACES)
-      .map(({ player, place }) => ({
+      .map(({ player }) => ({
         name: player.displayName,
         rating: player.rating,
-        provisional: place === null,
+        isNew: isNewPlayer(player),
       })),
   };
 };
@@ -255,7 +257,7 @@ const recapLines = (recap: WeeklyRecap): string[] => {
           (entry, index) =>
             // A dagger, not an asterisk: Slack would read a pair of those as bold.
             `${MEDALS[index]}  ${escapeSlack(entry.name)} ${entry.rating}${
-              entry.provisional ? "†" : ""
+              entry.isNew ? "†" : ""
             }`,
         )
         .join("  ·  "),
@@ -336,14 +338,14 @@ export const buildRecapPayload = (
 ) => {
   const title = `Week in review · ${escapeSlack(tableName)} · ${formatWeek(week)}`;
   const lines = recapLines(recap);
-  const footnote = recap.top.some((entry) => entry.provisional)
+  const footnote = recap.top.some((entry) => entry.isNew)
     ? [
         {
           type: "context",
           elements: [
             {
               type: "mrkdwn",
-              text: `† provisional: fewer than ${PROVISIONAL_GAMES} scored games`,
+              text: `† new: fewer than ${NEW_PLAYER_GAMES} scored games so far`,
             },
           ],
         },

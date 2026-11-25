@@ -15,9 +15,12 @@ export const DOUBLES_WEIGHT = 0.75;
 
 export const kFactorFor = (size: MatchSize): number =>
   size === 4 ? K_FACTOR * DOUBLES_WEIGHT : K_FACTOR;
-// Scored games before a player is ranked. Until then the rating is still shown, but a
-// handful of results says little and would let a 1–0 newcomer top the table.
-export const PROVISIONAL_GAMES = 10;
+
+// Scored games during which a player is marked "New". Everyone is ranked from their
+// first game; the mark only says that a rating built on so few results will still swing.
+// (Players used to go unranked until ten games, which on a small table left the board
+// mostly without places and told newcomers they didn't count yet.)
+export const NEW_PLAYER_GAMES = 3;
 
 export type RatedPlayer = {
   uid: string;
@@ -63,8 +66,8 @@ export type PlayerStats = {
   opponents: Versus[];
   // Codes of the tables this player has a scored game on.
   tables: string[];
-  // Position among all ranked players, on any table; null while provisional.
-  rank: number | null;
+  // Position among all players, on any table, by rating.
+  rank: number;
 };
 
 // A scored match together with what it did to the ratings: everyone's rating going in,
@@ -75,7 +78,7 @@ export type MatchRating = ScoredMatch & {
 };
 
 export type RatingStats = {
-  // Ranked players by rating, then provisional players by rating.
+  // Everyone with a scored game, by rating.
   players: PlayerStats[];
   matches: Record<string, MatchRating>;
 };
@@ -105,7 +108,7 @@ export const winRate = ({ games, wins }: Tally): number | null =>
 export const ratingOf = (stats: RatingStats | null, uid: string): number =>
   stats?.players.find((player) => player.uid === uid)?.rating ?? START_RATING;
 
-export const isProvisional = (player: PlayerStats): boolean => player.games < PROVISIONAL_GAMES;
+export const isNewPlayer = (player: PlayerStats): boolean => player.games < NEW_PLAYER_GAMES;
 
 const isPosition = (value: unknown): value is TeamPosition =>
   value === "front" || value === "back" || value === "solo";
@@ -175,7 +178,8 @@ const emptyStats = (uid: string, displayName: string): PlayerStats => ({
   partners: [],
   opponents: [],
   tables: [],
-  rank: null,
+  // Set once every match has been replayed.
+  rank: 0,
 });
 
 const bump = (list: Versus[], other: RatedPlayer, won: boolean): void => {
@@ -276,20 +280,18 @@ export const computeStats = (matches: ScoredMatch[]): RatingStats => {
 
   const byRating = (a: PlayerStats, b: PlayerStats): number =>
     b.rating - a.rating || b.games - a.games || a.displayName.localeCompare(b.displayName);
-  const all = [...byUid.values()];
-  const ranked = all.filter((player) => !isProvisional(player)).sort(byRating);
-  const provisional = all.filter(isProvisional).sort(byRating);
-  ranked.forEach((player, index) => {
+  const players = [...byUid.values()].sort(byRating);
+  players.forEach((player, index) => {
     player.rank = index + 1;
   });
 
-  return { players: [...ranked, ...provisional], matches: rated };
+  return { players, matches: rated };
 };
 
 export type Standing = {
   player: PlayerStats;
-  // Position among the players listed on this table's leaderboard; null while provisional.
-  place: number | null;
+  // Position among the players listed on this table's leaderboard.
+  place: number;
 };
 
 // Days without a scored game before a player drops off the leaderboards. They keep their
@@ -319,7 +321,7 @@ export const tableStandings = (
 
   return stats.players
     .filter((player) => player.tables.includes(tableCode) && isActive(player, now))
-    .map((player) => ({ player, place: isProvisional(player) ? null : (place += 1) }));
+    .map((player) => ({ player, place: (place += 1) }));
 };
 
 // Every rated match, newest first, optionally narrowed to one table and/or one player.

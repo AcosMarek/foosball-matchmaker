@@ -148,8 +148,7 @@ export const GlobalStyles = () => (
         }
       }
 
-      /* A leaderboard place landing in its slot, and the "Provisional" badge it replaces
-         coming loose and falling away. */
+      /* A newcomer's leaderboard place landing in its slot. */
       @keyframes dropIn {
         from {
           opacity: 0;
@@ -158,20 +157,6 @@ export const GlobalStyles = () => (
         to {
           opacity: 1;
           transform: none;
-        }
-      }
-
-      @keyframes breakAway {
-        0% {
-          opacity: 1;
-          transform: none;
-        }
-        20% {
-          transform: rotate(-8deg);
-        }
-        100% {
-          opacity: 0;
-          transform: translateY(3.5rem) rotate(35deg);
         }
       }
 

@@ -31,7 +31,7 @@ const statsOf = (
       partners: [],
       opponents: [],
       tables: [],
-      rank: null,
+      rank: 0,
     })),
   };
 };
