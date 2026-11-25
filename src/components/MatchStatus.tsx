@@ -10,6 +10,7 @@ import { ratingOf, type RatingStats } from "../ratings";
 import { Badge, CountdownRing, Icon, LiveDot, Rating, StatValue } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { DispositionAlert } from "./DispositionAlert";
+import { IdleBall } from "./IdleBall";
 
 const RESET_TOTAL_MS = RESET_MINUTES * MS_PER_MINUTE;
 const COOLDOWN_TOTAL_MS = START_COOLDOWN_MINUTES * MS_PER_MINUTE;
@@ -147,6 +148,7 @@ export const MatchStatus = ({
   if (!liveSession || !activeSession) {
     return (
       <StatusBlock>
+        <IdleBall />
         <Idle>No match running. Start one above.</Idle>
       </StatusBlock>
     );

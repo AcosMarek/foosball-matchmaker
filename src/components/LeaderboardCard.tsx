@@ -1,4 +1,6 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import styled from "@emotion/styled";
+import { prefersReducedMotion } from "../motion";
 import {
   ACTIVE_DAYS,
   PROVISIONAL_GAMES,
@@ -16,6 +18,8 @@ const List = styled.ol`
 `;
 
 const Entry = styled.li<{ own: boolean }>`
+  /* Lets a row that is sliding up be lifted above the ones it passes. */
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -78,6 +82,136 @@ const Points = styled.span<{ muted: boolean }>`
     props.muted ? "var(--md-sys-color-on-surface-variant)" : "var(--md-sys-color-on-surface)"};
 `;
 
+const Landing = styled(Place)`
+  color: var(--md-sys-color-primary);
+  font-weight: 600;
+  animation: dropIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) 0.9s both;
+`;
+
+const Falling = styled(Badge)`
+  animation: breakAway 0.7s cubic-bezier(0.5, 0, 0.9, 0.5) 0.4s both;
+`;
+
+const Welcome = styled(Hint)`
+  color: var(--md-sys-color-primary);
+  font-weight: 500;
+  animation: riseIn 0.5s ease-out 1.3s both;
+`;
+
+const SLIDE_MS = 650;
+const RANKED_SEEN_PREFIX = "foosball:rankedSeen:";
+// The ranked moment is for someone who has just got there. Anyone further past the
+// threshold than this was ranked long ago and is only marked as having seen it.
+const RANKED_FRESH_GAMES = 3;
+
+// Slides rows to their new places when the order changes, so an overtake is seen to
+// happen and the list doesn't simply reshuffle. Each row is moved back to where it was a
+// moment ago and let go; a row that went up is lifted over the others and flashes. A new
+// `scope` (another table) is a different list, not a reorder, so nothing moves then.
+//
+// Where a row "was" is worked out from the old order and the rows' present heights. It is
+// not a position remembered from the last render, because the layout shifts without one
+// (the icon font arriving, the window being resized) and a stale measurement sends rows
+// sliding in from the wrong place.
+const useSlideOnReorder = (
+  list: React.RefObject<HTMLOListElement>,
+  order: string[],
+  scope: string,
+): void => {
+  const lastOrder = useRef(order);
+  const lastScope = useRef(scope);
+  const orderKey = order.join();
+
+  useLayoutEffect(() => {
+    const previousOrder = lastOrder.current;
+    const reordered = lastScope.current === scope && previousOrder.join() !== orderKey;
+    lastOrder.current = order;
+    lastScope.current = scope;
+    if (!reordered || prefersReducedMotion()) {
+      return;
+    }
+
+    const rows = Array.from(list.current?.children ?? []) as HTMLElement[];
+    const heights = new Map(rows.map((row) => [row.dataset.uid ?? "", row.offsetHeight]));
+    // Distance from the top of the list to a row, were the rows stacked in `sequence`.
+    const topIn = (sequence: string[], uid: string): number => {
+      let top = 0;
+      for (const other of sequence) {
+        if (other === uid) {
+          break;
+        }
+        top += heights.get(other) ?? 0;
+      }
+
+      return top;
+    };
+
+    for (const row of rows) {
+      const uid = row.dataset.uid ?? "";
+      // Someone new to the list has no old place to come from.
+      if (!previousOrder.includes(uid)) {
+        continue;
+      }
+
+      const before = topIn(previousOrder, uid);
+      const now = topIn(order, uid);
+      if (before !== now) {
+        const slide = row.animate(
+          [{ transform: `translateY(${before - now}px)` }, { transform: "none" }],
+          { duration: SLIDE_MS, easing: "cubic-bezier(0.3, 0.8, 0.3, 1.1)" },
+        );
+        if (before > now) {
+          row.style.zIndex = "1";
+          slide.finished
+            .catch(() => {})
+            .then(() => {
+              row.style.zIndex = "";
+            });
+          // Fades back to the row's own background, spelled out because older mobile
+          // browsers don't accept a keyframe that leaves the end colour to be inferred.
+          row.animate(
+            [
+              { backgroundColor: "#b7f397" },
+              { backgroundColor: getComputedStyle(row).backgroundColor },
+            ],
+            { duration: SLIDE_MS * 2 },
+          );
+        }
+      }
+    }
+    // `order` itself is a new array on every render; its contents are what matter.
+  }, [list, orderKey, scope]);
+};
+
+// Whether to play the "you're ranked" moment: once per device, the first time the app
+// is opened with this player ranked, and only if that is news.
+const useRankedMoment = (uid: string, ranked: boolean, games: number): boolean => {
+  const [celebrating, setCelebrating] = useState(false);
+
+  useEffect(() => {
+    if (!ranked) {
+      return;
+    }
+
+    // If storage can't be read the moment is skipped, never repeated on every visit.
+    let seen = true;
+    try {
+      seen = localStorage.getItem(RANKED_SEEN_PREFIX + uid) === "1";
+      localStorage.setItem(RANKED_SEEN_PREFIX + uid, "1");
+    } catch {
+      // Ignore storage being unavailable (e.g. private browsing).
+    }
+
+    if (!seen && games < PROVISIONAL_GAMES + RANKED_FRESH_GAMES) {
+      setCelebrating(true);
+    }
+    // `games` is deliberately left out: it is read once, when the player turns ranked,
+    // and later games must not run this again.
+  }, [uid, ranked]);
+
+  return celebrating;
+};
+
 const RECENT_DAYS = 30;
 
 // Direction of the rating over the last month: up, down, or no movement.
@@ -106,6 +240,19 @@ type Props = {
 };
 
 export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => {
+  const list = useRef<HTMLOListElement>(null);
+  const order = (standings ?? []).map((entry) => entry.player.uid);
+  useSlideOnReorder(list, order, tableName);
+
+  const own = standings?.find((entry) => entry.player.uid === currentUid);
+  const celebrating = useRankedMoment(
+    currentUid,
+    !!own && own.place !== null,
+    own?.player.games ?? 0,
+  );
+  // The badge is put back for the moment so it can fall off, then removed for good.
+  const [badgeGone, setBadgeGone] = useState(false);
+
   if (!standings) {
     return null;
   }
@@ -125,13 +272,14 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
         </Hint>
       ) : (
         <>
-          <List>
+          <List ref={list}>
             {standings.map(({ player, place }) => {
               const provisional = isProvisional(player);
+              const justRanked = celebrating && player.uid === currentUid;
 
               return (
-                <Entry key={player.uid} own={player.uid === currentUid}>
-                  <Place>{place ?? "–"}</Place>
+                <Entry key={player.uid} data-uid={player.uid} own={player.uid === currentUid}>
+                  {justRanked ? <Landing>{place}</Landing> : <Place>{place ?? "–"}</Place>}
                   <SmallAvatar aria-hidden>
                     {player.displayName.trim().charAt(0).toUpperCase() || "?"}
                   </SmallAvatar>
@@ -141,6 +289,11 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
                       {player.uid === currentUid && " (you)"}
                     </span>
                     {provisional && <Badge>Provisional</Badge>}
+                    {justRanked && !badgeGone && (
+                      <Falling aria-hidden onAnimationEnd={() => setBadgeGone(true)}>
+                        Provisional
+                      </Falling>
+                    )}
                   </Name>
                   <Record>
                     {player.games} · {player.wins}–{player.losses}
@@ -151,6 +304,11 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
               );
             })}
           </List>
+          {celebrating && (
+            <Welcome role="status">
+              {PROVISIONAL_GAMES} scored games. You're ranked — welcome to the board.
+            </Welcome>
+          )}
           <Hint>
             Games · wins–losses · rating, counted across all tables. Ranked after{" "}
             {PROVISIONAL_GAMES} scored games. Players with no game in the last {ACTIVE_DAYS} days

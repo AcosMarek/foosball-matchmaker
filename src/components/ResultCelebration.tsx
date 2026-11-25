@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styled from "@emotion/styled";
 import { matchSizeLabel, teamColorHex } from "../matchmaking";
+import { prefersReducedMotion } from "../motion";
 import { formatDelta, type MatchRating } from "../ratings";
 import { Eyebrow, Icon, IconButton, OutlinedCard } from "../ui";
 import type { Session } from "../types";
@@ -80,10 +81,6 @@ const COUNT_UP_DELAY_MS = 400;
 const COUNT_UP_MS = 900;
 // Long enough to read, short enough that the card isn't still there for the next match.
 const AUTO_CLOSE_MS = 12000;
-
-const prefersReducedMotion = (): boolean =>
-  typeof window.matchMedia === "function" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Counts from `from` to `to` once `active`, easing out. Only how far along it is gets
 // stored, so the number shown is always worked out from the current `from` and `to`: the

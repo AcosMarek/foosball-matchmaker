@@ -148,6 +148,33 @@ export const GlobalStyles = () => (
         }
       }
 
+      /* A leaderboard place landing in its slot, and the "Provisional" badge it replaces
+         coming loose and falling away. */
+      @keyframes dropIn {
+        from {
+          opacity: 0;
+          transform: translateY(-2.2rem) scale(0.5);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes breakAway {
+        0% {
+          opacity: 1;
+          transform: none;
+        }
+        20% {
+          transform: rotate(-8deg);
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(3.5rem) rotate(35deg);
+        }
+      }
+
       /* One piece of confetti: thrown from its start point along its own --dx/--dy,
          spinning by --spin, and gone by the time it lands. */
       @keyframes confetti {
