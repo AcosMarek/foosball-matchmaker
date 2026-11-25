@@ -9,6 +9,9 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
   either (`src/theme.ts`). All colours are CSS variables in `src/ui.tsx`, with one block
   of dark values; components never name a colour directly
 - Admin-only table creation with auto-generated 6-character table codes
+- Admin-only weekly numbers per table (`src/weekly.ts`): matches started, filled and
+  scored for each of the last eight weeks, with the share that filled. Read straight from
+  the sessions, so they need no server and no stored counters
 - Admin-only "who gets pinged" list per table (`api/members.ts`): everyone registered on
   the table and whether a device of theirs is signed up for push. Only the server can see
   both, and it answers only for accounts in the `admins` collection. Admins can remove a

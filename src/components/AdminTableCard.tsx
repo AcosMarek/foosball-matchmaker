@@ -4,6 +4,7 @@ import type { User } from "firebase/auth";
 import {
   createTable,
   getTableReach,
+  getTableSessionsSince,
   getTableSlackWebhook,
   isSlackWebhookUrl,
   removeFromTable,
@@ -22,6 +23,13 @@ import {
   TextButton,
   TonalButton,
 } from "../ui";
+import {
+  fillRate,
+  formatWeek,
+  weeklyNumbers,
+  weeklyWindowStart,
+  type WeekNumbers,
+} from "../weekly";
 import type { TableReach } from "../../api/_lib/members";
 
 type Props = {
@@ -40,6 +48,43 @@ const Section = styled.div`
 const GrowInput = styled(Input)`
   flex: 1 1 14rem;
   min-width: 0;
+`;
+
+// The weekly numbers: a plain table, since that is what it is.
+const Weeks = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  & th {
+    padding: 0 0 0.35rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: var(--md-sys-color-on-surface-variant);
+    text-align: right;
+  }
+  & td {
+    padding: 0.35rem 0;
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+    text-align: right;
+  }
+  & th:first-of-type,
+  & td:first-of-type {
+    text-align: left;
+  }
+  & small {
+    margin-left: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+  /* A fixed width for the percentage keeps the counts before it in a straight column. */
+  & td:nth-of-type(3) small {
+    display: inline-block;
+    min-width: 2.1rem;
+    text-align: right;
+  }
 `;
 
 const Members = styled.ul`
@@ -114,6 +159,36 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
   const [reach, setReach] = useState<TableReach | null>(null);
   const [reachStatus, setReachStatus] = useState("");
   const [reachBusy, setReachBusy] = useState(false);
+
+  // Matches started, filled and scored per week at this table; null while loading.
+  const [weeks, setWeeks] = useState<WeekNumbers[] | null>(null);
+  const [weeksStatus, setWeeksStatus] = useState("");
+
+  useEffect(() => {
+    setWeeks(null);
+    setWeeksStatus("");
+    if (!selectedTable) {
+      return;
+    }
+
+    let cancelled = false;
+    getTableSessionsSince(selectedTable, weeklyWindowStart())
+      .then((sessions) => {
+        if (!cancelled) {
+          setWeeks(weeklyNumbers(sessions));
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          setWeeksStatus(`Couldn't load the weekly numbers: ${message}`);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTable]);
 
   // The player an admin has tapped "remove" on; removing takes a second, explicit tap.
   const [removing, setRemoving] = useState("");
@@ -238,6 +313,56 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
         </PrimaryButton>
       </Row>
       {status && <Hint>{status}</Hint>}
+
+      {selectedTable && (
+        <Section>
+          <Eyebrow>
+            <Icon size={16} aria-hidden>
+              monitoring
+            </Icon>
+            Activity · {selectedTableName}
+          </Eyebrow>
+          {weeks ? (
+            <Weeks>
+              <thead>
+                <tr>
+                  <th scope="col">Week</th>
+                  <th scope="col">Started</th>
+                  <th scope="col">Filled</th>
+                  <th scope="col">Scored</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeks.map((week) => {
+                  const rate = fillRate(week);
+
+                  return (
+                    <tr key={week.start.getTime()}>
+                      <td>
+                        {formatWeek(week)}
+                        {week.current && <small>so far</small>}
+                      </td>
+                      <td>{week.started}</td>
+                      <td>
+                        {week.filled}
+                        {/* Always present, so the counts line up in weeks with nothing started. */}
+                        <small>{rate === null ? "" : `${rate}%`}</small>
+                      </td>
+                      <td>{week.scored}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Weeks>
+          ) : (
+            <Hint>{weeksStatus || "Loading the weekly numbers…"}</Hint>
+          )}
+          <Hint>
+            Started: someone opened a match. Filled: enough players joined, with the share of
+            started matches beside it. Scored: a result was logged. Weeks run Monday to Sunday.
+          </Hint>
+        </Section>
+      )}
 
       {selectedTable && (
         <Section>

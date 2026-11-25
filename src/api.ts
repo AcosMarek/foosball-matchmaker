@@ -46,6 +46,7 @@ import { balanceTeams, dispositionFromTeams } from "./teams";
 import { toDate } from "./utils";
 import type { FoosballTable } from "./types";
 import type { TableReach } from "../api/_lib/members";
+import type { WeeklySession } from "./weekly";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
 
@@ -152,6 +153,42 @@ const askMembers = async (
   }
 
   return (await response.json()) as TableReach;
+};
+
+// Every match started at a table since `since`, reduced to what the admin's weekly
+// numbers count. Sessions are readable by anyone, so this needs no server.
+export const getTableSessionsSince = async (
+  tableCode: string,
+  since: Date,
+): Promise<WeeklySession[]> => {
+  const snapshot = await getDocs(
+    query(
+      collection(db, "sessions"),
+      where("tableCode", "==", tableCode),
+      where("startedAt", ">=", since),
+      orderBy("startedAt", "desc"),
+    ),
+  );
+
+  return snapshot.docs.flatMap((session) => {
+    const data = session.data();
+    const startedAt = toDate(data.startedAt);
+    if (!startedAt) {
+      return [];
+    }
+
+    const target = data.targetPlayers === 2 ? 2 : 4;
+
+    return [
+      {
+        startedAt,
+        // The "game on" claim counts too: it is only ever made for a full match.
+        filled: Number(data.playerCount ?? 0) >= target || !!data.readyNotifiedAt,
+        scored: !!data.result,
+        cancelled: !!data.cancelled,
+      },
+    ];
+  });
 };
 
 export const getTableReach = (user: User, tableCode: string): Promise<TableReach> =>
