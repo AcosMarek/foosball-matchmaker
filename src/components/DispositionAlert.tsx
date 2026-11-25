@@ -109,6 +109,9 @@ export const DispositionAlert = ({ disposition, waiting, stats }: Props) => (
         </Team>
       ))}
     </Teams>
+    {disposition.size === 4 && (
+      <Waiting>Teams are balanced by rating, and front and back take turns.</Waiting>
+    )}
     {waiting.length > 0 && <Waiting>Next up: {waiting.join(", ")}</Waiting>}
   </Ready>
 );

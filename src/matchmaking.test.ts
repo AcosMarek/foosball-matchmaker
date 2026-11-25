@@ -10,6 +10,7 @@ import {
   matchPhase,
   mergeRoster,
   normalizeTableCode,
+  reminderDueIn,
   resultDeadline,
   resultWindowRemaining,
   scoreWinner,
@@ -32,6 +33,13 @@ describe("score logging window", () => {
 
   it("puts the deadline an hour after the start", () => {
     expect(resultDeadline(startedAt)).toEqual(minutesLater(60));
+  });
+
+  it("makes the score reminder due fifteen minutes after the match filled", () => {
+    expect(reminderDueIn(startedAt, startedAt)).toBe(15 * 60_000);
+    expect(reminderDueIn(startedAt, minutesLater(14))).toBe(60_000);
+    expect(reminderDueIn(startedAt, minutesLater(15))).toBe(0);
+    expect(reminderDueIn(startedAt, minutesLater(40))).toBe(0);
   });
 });
 

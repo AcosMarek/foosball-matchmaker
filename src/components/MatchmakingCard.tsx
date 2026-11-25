@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import styled from "@emotion/styled";
 import type { User } from "firebase/auth";
 import {
+  ensureTeams,
   joinSession,
   notifyJoin,
   notifyMatchExpired,
@@ -12,7 +13,6 @@ import {
 import { useNow } from "../hooks";
 import {
   SUPPORTED_PLAYER_COUNTS,
-  buildMatchDisposition,
   canStartMatch,
   fillWindowRemaining,
   matchPhase,
@@ -21,8 +21,11 @@ import {
 } from "../matchmaking";
 import { Card, Eyebrow, Hint, Icon, PrimaryButton, Row } from "../ui";
 import type { RatingStats } from "../ratings";
+import { balanceTeams, dispositionFromTeams } from "../teams";
 import type { JoinedPlayer, Session } from "../types";
 import { MatchStatus } from "./MatchStatus";
+
+const TEAM_REPAIR_DELAY_MS = 4000;
 
 const TableLine = styled.p`
   margin: 0 0 0.9rem;
@@ -71,7 +74,13 @@ export const MatchmakingCard = ({
   const [joinedSessionId, setJoinedSessionId] = useState("");
 
   const targetPlayers = activeSession?.targetPlayers ?? 4;
-  const disposition = activeSession ? buildMatchDisposition(sessionPlayers, targetPlayers) : null;
+  // The stored teams are the ones that count. Until they land, a moment after the match
+  // fills, this shows the pick this client would make, which is normally the same one.
+  const disposition = !activeSession
+    ? null
+    : activeSession.teams
+      ? dispositionFromTeams(activeSession.teams, targetPlayers)
+      : balanceTeams(sessionPlayers, targetPlayers, stats);
   const waiting = disposition
     ? sessionPlayers.slice(disposition.size).map((player) => player.displayName)
     : [];
@@ -120,6 +129,26 @@ export const MatchmakingCard = ({
     ).catch((error) => console.error("notifyMatchExpired failed", error));
   }, [user, activeSession, selectedTable, phase]);
 
+  // The join that fills a match stores its teams. If that client dropped out before it
+  // could, any player still looking at the full match stores them instead, after a pause
+  // that lets the usual path go first. Waits for ratings, since storing without them
+  // would settle for the join order.
+  const hasTeams = !!activeSession?.teams;
+  const activeSessionId = activeSession?.id ?? "";
+  useEffect(() => {
+    if (!activeSessionId || !matchFull || hasTeams || !joined || !stats) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void ensureTeams(activeSessionId, sessionPlayers, targetPlayers, stats).catch((error) =>
+        console.error("Couldn't store the teams", error),
+      );
+    }, TEAM_REPAIR_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [activeSessionId, matchFull, hasTeams, joined, stats, sessionPlayers, targetPlayers]);
+
   const handleStart = async (size: MatchSize) => {
     if (!user || !selectedTable) {
       return;
@@ -138,7 +167,7 @@ export const MatchmakingCard = ({
     // Best-effort: the match exists either way, so a failed alert must not surface as a
     // failed start — but it must not pass silently either.
     try {
-      const notified = await notifyTableMembers(user, selectedTable, size);
+      const notified = await notifyTableMembers(user, selectedTable, size, stats);
       if (notified > 0) {
         setFeedback(
           `${matchSizeLabel(size)} is on — pinged ${notified} player${notified === 1 ? "" : "s"}.`,
@@ -177,6 +206,7 @@ export const MatchmakingCard = ({
         activeSession.targetPlayers,
         position,
         sessionPlayers,
+        stats,
       );
       if (pinged > 0) {
         setFeedback(`Game on! Pinged ${pinged} player${pinged === 1 ? "" : "s"}.`);

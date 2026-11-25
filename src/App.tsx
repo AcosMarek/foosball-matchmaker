@@ -8,6 +8,7 @@ import {
   useNotifications,
   usePendingResults,
   useRecentSessions,
+  useScoreReminders,
   useSessionPlayers,
   useTableMemberCount,
   useRatingStats,
@@ -127,6 +128,7 @@ export default function App() {
   // normal session lifecycle, so a player can still log one after the cooldown lapses or
   // a new match has started, for up to an hour.
   const pendingResults = usePendingResults(user, recentSessions);
+  useScoreReminders(user, selectedTable, recentSessions);
 
   const selectedTableName =
     visited.find((table) => table.code === selectedTable)?.name ||
@@ -198,6 +200,7 @@ export default function App() {
               user={user}
               session={session}
               tableCode={selectedTable}
+              stats={stats}
             />
           ))}
 

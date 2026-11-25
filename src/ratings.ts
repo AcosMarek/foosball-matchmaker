@@ -81,6 +81,11 @@ export const formatDelta = (delta: number): string =>
 export const expectedScore = (own: number, other: number): number =>
   1 / (1 + 10 ** ((other - own) / 400));
 
+// Points a side rated `own` gains (or, negative, loses) against one rated `other`. The
+// other side moves by the same amount the opposite way.
+export const ratingDelta = (own: number, other: number, won: boolean): number =>
+  Math.round(K_FACTOR * ((won ? 1 : 0) - expectedScore(own, other)));
+
 export const teamAverage = (ratings: number[]): number =>
   ratings.length === 0
     ? START_RATING
@@ -218,9 +223,7 @@ export const computeStats = (matches: ScoredMatch[]): RatingStats => {
     const redRating = teamAverage(red.players.map((player) => before[player.uid]));
     const blueRating = teamAverage(blue.players.map((player) => before[player.uid]));
     const redWon = match.score.red > match.score.blue;
-    const redDelta = Math.round(
-      K_FACTOR * ((redWon ? 1 : 0) - expectedScore(redRating, blueRating)),
-    );
+    const redDelta = ratingDelta(redRating, blueRating, redWon);
     rated[match.sessionId] = { ...match, before, delta: [redDelta, -redDelta] };
 
     const sides = [

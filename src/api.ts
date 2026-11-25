@@ -26,32 +26,69 @@ import {
   mergeRoster,
   type RosterEntry,
   type MatchDisposition,
+  type MatchPlayer,
   type MatchScore,
   type MatchSize,
   type TeamPosition,
 } from "./matchmaking";
-import { teamsFromDisposition } from "./ratings";
+import {
+  parseResultTeams,
+  ratingDelta,
+  ratingOf,
+  teamAverage,
+  teamsFromDisposition,
+  type RatedTeam,
+  type RatingStats,
+} from "./ratings";
+import { balanceTeams, dispositionFromTeams } from "./teams";
 import { toDate } from "./utils";
 import type { FoosballTable } from "./types";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
 
+// "Ada (1042)" for announcements, or just the name while ratings haven't loaded.
+const nameWithRating = (user: User, fallback: string, stats: RatingStats | null): string => {
+  const name = user.displayName || fallback;
+
+  return stats ? `${name} (${ratingOf(stats, user.uid)})` : name;
+};
+
 const PUSH_ENDPOINT = import.meta.env.VITE_PUSH_ENDPOINT as string | undefined;
 
 export const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
 
+// `rating` is what the player held going into the match and `delta` what the result did
+// to it; both are left out when ratings aren't available, and Slack then shows names only.
 type NotifyTeam = {
   color: string;
-  players: { name: string; position: TeamPosition }[];
+  players: { name: string; position: TeamPosition; rating?: number; delta?: number }[];
 };
 
 type NotifyPayload = {
   message: string;
-  event: "start" | "join" | "ready" | "result" | "expired";
+  event: "start" | "join" | "ready" | "result" | "expired" | "remind";
   recipients?: string[];
   tableCode?: string;
   teams?: NotifyTeam[];
+  sessionId?: string;
 };
+
+// The lineup as the sender wants it, with ratings when they are known. `redDelta` is what
+// a logged result did to Red's players; Blue's moved the same amount the other way.
+const notifyTeams = (
+  disposition: MatchDisposition | null,
+  stats: RatingStats | null,
+  redDelta?: number,
+): NotifyTeam[] =>
+  (disposition?.teams ?? []).map((team, index) => ({
+    color: team.color,
+    players: team.players.map((entry) => ({
+      name: entry.player.displayName,
+      position: entry.position,
+      ...(stats ? { rating: ratingOf(stats, entry.player.uid) } : {}),
+      ...(redDelta === undefined ? {} : { delta: index === 0 ? redDelta : -redDelta }),
+    })),
+  }));
 
 // Fan-out via the serverless sender: Web Push plus a Slack post when the table has a
 // webhook configured. A "start" is pushed to everyone registered on the table (the sender
@@ -61,7 +98,7 @@ type NotifyPayload = {
 // so local dev without it still works.
 const sendNotification = async (
   user: User,
-  { recipients = [], message, tableCode = "", event, teams = [] }: NotifyPayload,
+  { recipients = [], message, tableCode = "", event, teams = [], sessionId = "" }: NotifyPayload,
 ): Promise<number> => {
   if (!PUSH_ENDPOINT || (recipients.length === 0 && !tableCode)) {
     return 0;
@@ -71,7 +108,7 @@ const sendNotification = async (
   const response = await fetch(PUSH_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken, recipients, message, tableCode, event, teams }),
+    body: JSON.stringify({ idToken, recipients, message, tableCode, event, teams, sessionId }),
   });
   if (!response.ok) {
     throw new Error(`Notification sender answered ${response.status}`);
@@ -145,9 +182,10 @@ export const notifyTableMembers = (
   user: User,
   tableCode: string,
   targetPlayers: MatchSize,
+  stats: RatingStats | null = null,
 ): Promise<number> =>
   sendNotification(user, {
-    message: `${user.displayName || "A player"} started a ${matchSizeLabel(
+    message: `${nameWithRating(user, "A player", stats)} started a ${matchSizeLabel(
       targetPlayers,
     )} on ${tableCode}.`,
     tableCode,
@@ -176,6 +214,35 @@ const readSessionPlayers = async (sessionId: string): Promise<RosterEntry[]> => 
   );
 };
 
+// Picks the teams for a full match and stores them on the session, once: whoever gets
+// there first decides, and everyone else (this caller included) takes what is stored.
+// Storing matters because the teams depend on ratings, which keep moving as other results
+// are logged; a lineup recomputed on each screen could change mid-game or differ between
+// players. Resolves to null while the roster is still short of a full match.
+export const ensureTeams = async (
+  sessionId: string,
+  players: MatchPlayer[],
+  targetPlayers: MatchSize,
+  stats: RatingStats | null,
+): Promise<MatchDisposition | null> => {
+  const proposed = balanceTeams(players, targetPlayers, stats);
+  if (!proposed) {
+    return null;
+  }
+
+  const sessionRef = doc(db, "sessions", sessionId);
+
+  return runTransaction(db, async (tx) => {
+    const stored = parseResultTeams((await tx.get(sessionRef)).data()?.teams);
+    if (stored) {
+      return dispositionFromTeams(stored, targetPlayers);
+    }
+
+    tx.update(sessionRef, { teams: teamsFromDisposition(proposed) });
+    return proposed;
+  });
+};
+
 // Every join posts to Slack so the channel can watch a match fill up. The join that fills
 // it instead pushes the final lineup to the players already in: a one-time transactional
 // claim on the session guarantees that "Game on!" alert is sent exactly once, even if
@@ -188,6 +255,7 @@ export const notifyJoin = async (
   targetPlayers: MatchSize,
   position: number,
   knownPlayers: RosterEntry[] = [],
+  stats: RatingStats | null = null,
 ): Promise<number> => {
   // Three sources, unioned: the query can come back short, the listener can lag the join
   // that just happened, and the joiner themselves is guaranteed to be in the match.
@@ -205,7 +273,7 @@ export const notifyJoin = async (
   const outcome = joinOutcome(position, players.length, targetPlayers);
   if (!outcome.filled) {
     await sendNotification(user, {
-      message: `${displayNameOf(user)} joined the game — ${outcome.remaining} spot${
+      message: `${nameWithRating(user, displayNameOf(user), stats)} joined the game — ${outcome.remaining} spot${
         outcome.remaining === 1 ? "" : "s"
       } left.`,
       tableCode,
@@ -214,6 +282,15 @@ export const notifyJoin = async (
 
     return 0;
   }
+
+  // The teams are settled before the announcement so it carries the lineup everyone will
+  // see. Built from whatever the roster read returned: a short read costs the lineup
+  // detail, and a refused write falls back to this client's own pick, but neither may
+  // cost the announcement itself.
+  const disposition = await ensureTeams(sessionId, players, targetPlayers, stats).catch((error) => {
+    console.error("Couldn't store the teams", error);
+    return balanceTeams(players, targetPlayers, stats);
+  });
 
   const sessionRef = doc(db, "sessions", sessionId);
   const claimed = await runTransaction(db, async (tx) => {
@@ -228,9 +305,6 @@ export const notifyJoin = async (
     return 0;
   }
 
-  // Built from whatever the roster read returned: a short read costs the lineup detail
-  // but must never cost the announcement itself.
-  const disposition = buildMatchDisposition(players, targetPlayers);
   const lineup = disposition
     ? describeDisposition(disposition)
     : `${players.length}/${targetPlayers} in.`;
@@ -243,13 +317,7 @@ export const notifyJoin = async (
     recipients: recipients.map((player) => player.uid),
     tableCode,
     event: "ready",
-    teams: (disposition?.teams ?? []).map((team) => ({
-      color: team.color,
-      players: team.players.map((entry) => ({
-        name: entry.player.displayName,
-        position: entry.position,
-      })),
-    })),
+    teams: notifyTeams(disposition, stats),
   });
 };
 
@@ -411,11 +479,16 @@ export const getSessionRosters = async (
   return new Map([...bySession].map(([sessionId, roster]) => [sessionId, mergeRoster(roster)]));
 };
 
+// The teams a match was played with: the ones stored when it filled, or, for a match from
+// before teams were stored, the join order that assigned them at the time.
 export const getSessionDisposition = async (
   sessionId: string,
   targetPlayers: MatchSize,
+  teams: [RatedTeam, RatedTeam] | null = null,
 ): Promise<MatchDisposition | null> =>
-  buildMatchDisposition(await readSessionPlayers(sessionId), targetPlayers);
+  teams
+    ? dispositionFromTeams(teams, targetPlayers)
+    : buildMatchDisposition(await readSessionPlayers(sessionId), targetPlayers);
 
 // Any player in the match may log its score within an hour of its start, and only the
 // first one counts; the rules enforce all three, so a tampered client can't score a match
@@ -428,7 +501,16 @@ export const recordMatchResult = async (
   tableCode: string,
   score: MatchScore,
   disposition: MatchDisposition | null,
+  stats: RatingStats | null = null,
 ): Promise<void> => {
+  // Worked out before the write: once the result lands, the live ratings already include
+  // it and "going into the match" can no longer be read off them.
+  const [red, blue] = (disposition?.teams ?? []).map((team) =>
+    teamAverage(team.players.map((entry) => ratingOf(stats, entry.player.uid))),
+  );
+  const redDelta =
+    stats && disposition ? ratingDelta(red, blue, score.red > score.blue) : undefined;
+
   await updateDoc(doc(db, "sessions", sessionId), {
     result: {
       red: score.red,
@@ -444,8 +526,15 @@ export const recordMatchResult = async (
     message: `Full time — ${describeResult(score)}`,
     tableCode,
     event: "result",
+    teams: notifyTeams(disposition, stats, redDelta),
   }).catch(() => {});
 };
+
+// Asks the sender to nudge a match's players to log their score. The sender decides
+// whether it is due (filled a while ago, still open, not nudged before) and who gets it,
+// so calling this early or twice is harmless. Resolves to the number of players reached.
+export const remindToScore = (user: User, sessionId: string, tableCode: string): Promise<number> =>
+  sendNotification(user, { message: "", tableCode, event: "remind", sessionId });
 
 // Calls a match off: someone had to leave, or there is no fair score to log. It then has
 // no result, so it never reaches the ratings, and it can't be scored afterwards. The same

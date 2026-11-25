@@ -11,13 +11,14 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { getSessionDisposition, getSessionRosters, registerOnTable } from "./api";
+import { getSessionDisposition, getSessionRosters, registerOnTable, remindToScore } from "./api";
 import { registerForPush } from "./push";
 import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
 import {
   buildMatchDisposition,
   canStartMatch,
   isValidScore,
+  reminderDueIn,
   resultWindowRemaining,
   type RosterEntry,
 } from "./matchmaking";
@@ -58,6 +59,9 @@ const readSession = (snapshot: QueryDocumentSnapshot<DocumentData>): Session | n
         }
       : null,
     cancelled: !!data.cancelled,
+    teams: parseResultTeams(data.teams),
+    readyAt: toDate(data.readyNotifiedAt),
+    reminded: !!data.remindNotifiedAt,
   };
 };
 
@@ -265,7 +269,7 @@ export const usePendingResults = (user: User | null, sessions: Session[]): Sessi
       // dropped when a newer session snapshot arrives: the lookup isn't repeated, so a
       // dropped answer would hide the prompt for good.
       requested.current.add(session.id);
-      getSessionDisposition(session.id, session.targetPlayers)
+      getSessionDisposition(session.id, session.targetPlayers, session.teams)
         .then((disposition) => {
           if (account.current !== uid) {
             return;
@@ -293,6 +297,59 @@ export const usePendingResults = (user: User | null, sessions: Session[]): Sessi
     () => unscored.filter((session) => session.startedBy === uid || playedIn[session.id]),
     [unscored, uid, playedIn],
   );
+};
+
+// Nudges a match's players to log their score once it has sat open for a while. Nothing
+// on the server runs on a timer, so, like the timed-out announcement, it is whichever
+// client has the table open that notices and asks the sender. The sender checks the match
+// really is due and sends at most one nudge however many clients ask, which is why this
+// only needs to ask once per match and can ignore the answer.
+export const useScoreReminders = (
+  user: User | null,
+  tableCode: string,
+  sessions: Session[],
+): void => {
+  const asked = useRef(new Set<string>());
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!user || !tableCode) {
+      return;
+    }
+
+    const now = new Date();
+    let nextDueMs = Number.POSITIVE_INFINITY;
+
+    for (const session of sessions) {
+      const open = !session.result && !session.cancelled && !session.reminded;
+      const full = session.playerCount >= session.targetPlayers;
+      if (!open || !full || asked.current.has(session.id)) {
+        continue;
+      }
+      if (resultWindowRemaining(session.startedAt, now) === 0) {
+        continue;
+      }
+
+      const waitMs = reminderDueIn(session.readyAt ?? session.startedAt, now);
+      if (waitMs > 0) {
+        nextDueMs = Math.min(nextDueMs, waitMs);
+        continue;
+      }
+
+      asked.current.add(session.id);
+      void remindToScore(user, session.id, tableCode).catch((error) =>
+        console.error("Score reminder failed", error),
+      );
+    }
+
+    if (!Number.isFinite(nextDueMs)) {
+      return;
+    }
+
+    const timer = setTimeout(() => setTick((count) => count + 1), nextDueMs + 1000);
+
+    return () => clearTimeout(timer);
+  }, [user, tableCode, sessions, tick]);
 };
 
 // A scored session as a rateable match. Results recorded before teams were stored fall

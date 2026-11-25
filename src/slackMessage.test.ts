@@ -170,6 +170,107 @@ describe("slack payload", () => {
     expect(blocks[1].fields?.[0].text).toContain("&lt;!channel&gt;");
   });
 
+  it("shows each player's rating and the team average when a match fills", () => {
+    const rated = parseRoster([
+      {
+        color: "Red",
+        players: [
+          { name: "Alice", position: "front", rating: 1042 },
+          { name: "Bob", position: "back", rating: 981 },
+        ],
+      },
+      {
+        color: "Blue",
+        players: [
+          { name: "Carol", position: "front", rating: 1000 },
+          { name: "Dave", position: "back", rating: 1030 },
+        ],
+      },
+    ]);
+    const blocks = blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", rated));
+
+    expect(blocks[1].fields?.[0].text).toBe(
+      ":red_circle:  *Red*  ·  avg 1012\n:crossed_swords:  Alice  ·  1042\n:shield:  Bob  ·  981",
+    );
+    expect(blocks[1].fields?.[1].text).toBe(
+      ":large_blue_circle:  *Blue*  ·  avg 1015\n:crossed_swords:  Carol  ·  1000\n:shield:  Dave  ·  1030",
+    );
+  });
+
+  it("gives a 1v1 ratings but no average", () => {
+    const rated = parseRoster([
+      { color: "Red", players: [{ name: "Alice", position: "solo", rating: 1042 }] },
+      { color: "Blue", players: [{ name: "Bob", position: "solo", rating: 981 }] },
+    ]);
+    const blocks = blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", rated));
+
+    expect(blocks[1].fields?.[0].text).toBe(":red_circle:  *Red*\n:dart:  Alice  ·  1042");
+  });
+
+  it("drops ratings that aren't plausible instead of dropping the lineup", () => {
+    const [red] = parseRoster([
+      {
+        color: "Red",
+        players: [
+          { name: "Alice", position: "front", rating: "1042" },
+          { name: "Bob", position: "back", rating: 99999, delta: 5 },
+        ],
+      },
+      doubles[1],
+    ]);
+
+    expect(red.players).toEqual([
+      { name: "Alice", position: "front" },
+      { name: "Bob", position: "back" },
+    ]);
+  });
+
+  it("posts a result with what it did to every rating", () => {
+    const settled = parseRoster([
+      {
+        color: "Red",
+        players: [
+          { name: "Alice", position: "front", rating: 1042, delta: 16 },
+          { name: "Bob", position: "back", rating: 981, delta: 16 },
+        ],
+      },
+      {
+        color: "Blue",
+        players: [
+          { name: "Carol", position: "front", rating: 1000, delta: -16 },
+          { name: "Dave", position: "back", rating: 1030, delta: -16 },
+        ],
+      },
+    ]);
+    const payload = buildSlackPayload(
+      APP_URL,
+      "MG3586",
+      "result",
+      "Full time — Red 10 – Blue 7 — Red wins.",
+      settled,
+    );
+    const blocks = blocksOf(payload);
+
+    expect(payload.text).toBe("Full time — Red 10 – Blue 7 — Red wins.");
+    expect(blocks[0].text?.text).toBe(":checkered_flag:  Full time — Red 10 – Blue 7 — Red wins.");
+    expect(blocks[1].fields?.[0].text).toBe(
+      ":red_circle:  *Red*\n:crossed_swords:  Alice  ·  1042 → 1058 (+16)\n:shield:  Bob  ·  981 → 997 (+16)",
+    );
+    expect(blocks[1].fields?.[1].text).toBe(
+      ":large_blue_circle:  *Blue*\n:crossed_swords:  Carol  ·  1000 → 984 (−16)\n:shield:  Dave  ·  1030 → 1014 (−16)",
+    );
+    expect(blocks.some((block) => block.type === "actions")).toBe(false);
+  });
+
+  it("keeps a result as plain text when no ratings came with it", () => {
+    const text = "Full time — Red 10 – Blue 7 — Red wins.";
+
+    expect(buildSlackPayload(APP_URL, "MG3586", "result", text, [])).toEqual({ text });
+    expect(buildSlackPayload(APP_URL, "MG3586", "result", text, parseRoster(doubles))).toEqual({
+      text,
+    });
+  });
+
   it("keeps the fallback text alongside the blocks for notification previews", () => {
     const payload = buildSlackPayload(
       APP_URL,

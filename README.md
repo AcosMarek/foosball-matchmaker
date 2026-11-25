@@ -13,6 +13,17 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 - Elo ratings, computed in the browser from the scored matches (`src/ratings.ts`): one
   rating per player across all tables, a leaderboard per table, personal statistics, and
   ratings in the queue and match history
+- Balanced 2v2 teams (`src/teams.ts`): when a match fills, its four players are split into
+  the two sides with the closest combined rating, front and back go to whoever is due a
+  turn there, and the teams are stored on the session so they can't shift mid-game
+- Any player in a match can log its score or cancel it, for an hour after it started;
+  players are nudged by push if no score is in 15 minutes after the match filled
+- Slack posts carry the players' ratings: on start and join, in the lineup when a match
+  fills (with team averages), and as the change each player's rating took from a result
+- Weekly Slack recap per table (`api/recap.ts`, run by the Vercel cron in `vercel.json`
+  every Monday 07:00 UTC): games played, most active player, biggest climber, upset of the
+  week and the top of the leaderboard. Weeks without a scored game are skipped. Setting
+  `CRON_SECRET` in Vercel is optional; when set, only the cron can call the endpoint
 
 ## Setup
 

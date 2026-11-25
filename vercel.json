@@ -2,6 +2,15 @@
   "functions": {
     "api/send.ts": {
       "maxDuration": 10
+    },
+    "api/recap.ts": {
+      "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/recap",
+      "schedule": "0 7 * * 1"
+    }
+  ]
 }

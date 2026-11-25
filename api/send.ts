@@ -73,6 +73,17 @@ const PUSH_TTL_SECONDS = 300;
 const START_PUSH_WINDOW_MS = 2 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 200;
 const TABLE_CODE_RE = /^[A-Z0-9]{6}$/;
+const SESSION_ID_RE = /^[A-Za-z0-9]{8,40}$/;
+// A match's players are nudged to log the score once it has been full this long with no
+// result, and never after the hour in which a score can still be logged. Mirrors
+// REMIND_AFTER_MINUTES and RESULT_WINDOW_MINUTES in src/matchmaking.ts; the slack is for
+// the clock of the client that asks, which decides when to ask but not whether it is due.
+const REMIND_AFTER_MS = 15 * 60 * 1000;
+const REMIND_CLOCK_SLACK_MS = 60 * 1000;
+const RESULT_WINDOW_MS = 60 * 60 * 1000;
+// Written here, never taken from the caller: any signed-in user can ask for a reminder.
+const REMINDER_TEXT =
+  "How did it go? Log the score for your match, or cancel it if it didn't finish.";
 const SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/services/";
 
 // The allowed origin doubles as the app's public URL, so Slack posts can deep-link
@@ -154,6 +165,84 @@ const claimStartPush = async (db: Firestore, tableCode: string, uid: string): Pr
     tx.update(session.ref, { startNotifiedAt: FieldValue.serverTimestamp() });
     return true;
   });
+};
+
+// The uids in the teams stored on a session, or none when it has no (valid) teams.
+const storedTeamUids = (teams: unknown): string[] => {
+  if (!Array.isArray(teams)) {
+    return [];
+  }
+
+  return teams.flatMap((team: unknown) => {
+    const players: unknown = (team as { players?: unknown } | null)?.players;
+
+    return Array.isArray(players)
+      ? players
+          .map((player: unknown): unknown => (player as { uid?: unknown } | null)?.uid)
+          .filter((uid): uid is string => typeof uid === "string" && uid !== "")
+      : [];
+  });
+};
+
+// Who to nudge about an unlogged score, or nobody when the match isn't due one. The
+// conditions are checked here and the reminder is claimed in the same transaction, so it
+// goes out once per match no matter how many clients ask, and asking can't be used to
+// ping people about anything else. Resolves to the players in the match itself: the
+// stored teams, or the first joiners of a match from before teams were stored.
+const claimScoreReminder = async (
+  db: Firestore,
+  tableCode: string,
+  sessionId: string,
+): Promise<string[]> => {
+  const ref = db.collection("sessions").doc(sessionId);
+  const claimed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const startedAt: unknown = snap.get("startedAt");
+    const readyAt: unknown = snap.get("readyNotifiedAt");
+    if (!snap.exists || snap.get("tableCode") !== tableCode || !(startedAt instanceof Timestamp)) {
+      return null;
+    }
+
+    const size = snap.get("targetPlayers") === 2 ? 2 : 4;
+    const filledAt = readyAt instanceof Timestamp ? readyAt : startedAt;
+    const now = Date.now();
+    const open = !snap.get("result") && !snap.get("cancelled") && !snap.get("remindNotifiedAt");
+    const full = Number(snap.get("playerCount") ?? 0) >= size;
+    const due =
+      now - filledAt.toMillis() >= REMIND_AFTER_MS - REMIND_CLOCK_SLACK_MS &&
+      now - startedAt.toMillis() < RESULT_WINDOW_MS;
+    if (!open || !full || !due) {
+      return null;
+    }
+
+    tx.update(ref, { remindNotifiedAt: FieldValue.serverTimestamp() });
+    return { size, teams: snap.get("teams") as unknown };
+  });
+  if (!claimed) {
+    return [];
+  }
+
+  const fromTeams = storedTeamUids(claimed.teams);
+  if (fromTeams.length > 0) {
+    return [...new Set(fromTeams)].slice(0, MAX_RECIPIENTS);
+  }
+
+  const joins = await db.collection("sessionJoins").where("sessionId", "==", sessionId).get();
+
+  return joins.docs
+    .map((join) => {
+      const uid: unknown = join.get("uid");
+      const joinedAt: unknown = join.get("joinedAt");
+
+      return {
+        uid: typeof uid === "string" ? uid : "",
+        at: joinedAt instanceof Timestamp ? joinedAt.toMillis() : Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .filter((join) => join.uid !== "")
+    .sort((a, b) => a.at - b.at)
+    .slice(0, claimed.size)
+    .map((join) => join.uid);
 };
 
 // Everyone registered on the table except the caller, who already knows.
@@ -252,13 +341,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const { idToken, recipients, message, tableCode, event, teams } = (req.body ?? {}) as {
+  const { idToken, recipients, message, tableCode, event, teams, sessionId } = (req.body ??
+    {}) as {
     idToken?: unknown;
     recipients?: unknown;
     message?: unknown;
     tableCode?: unknown;
     event?: unknown;
     teams?: unknown;
+    sessionId?: unknown;
   };
 
   if (typeof idToken !== "string" || !Array.isArray(recipients) || typeof message !== "string") {
@@ -268,6 +359,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const table = typeof tableCode === "string" && TABLE_CODE_RE.test(tableCode) ? tableCode : "";
   const kind = typeof event === "string" ? event : "";
+  const session = typeof sessionId === "string" && SESSION_ID_RE.test(sessionId) ? sessionId : "";
+  const reminder = kind === "remind";
   const roster = parseRoster(teams);
 
   let db: Firestore;
@@ -291,12 +384,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const body = message.slice(0, MAX_MESSAGE_LENGTH);
+  const body = reminder ? REMINDER_TEXT : message.slice(0, MAX_MESSAGE_LENGTH);
   const data = { title: "Foosball Matchmaker", body, tableCode: table, event: kind };
 
-  // A match start goes to the whole table, resolved here rather than trusted from the
-  // client; every other event goes to the players the caller listed.
+  // A match start goes to the whole table and a score reminder to the players of that
+  // match, both resolved here rather than trusted from the client; every other event goes
+  // to the players the caller listed.
   const resolveUids = async (): Promise<string[]> => {
+    if (reminder) {
+      return table && session ? claimScoreReminder(db, table, session) : [];
+    }
+
     if (kind === "start" && table) {
       if (!(await claimStartPush(db, table, callerUid))) {
         console.warn(`send: start push for ${table} not claimed`);
@@ -320,7 +418,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         console.error("send: push failed", err);
         return 0;
       }),
-    table
+    // A reminder is for the four people in the match, not the channel.
+    table && !reminder
       ? postToSlack(db, table, kind, body, roster).catch((err) => {
           console.error("send: slack failed", err);
           return false;

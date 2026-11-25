@@ -36,6 +36,14 @@ service cloud.firestore {
         && cancelled.at == request.time;
     }
 
+    // The teams are picked once, when the match fills. Whoever stores them first decides;
+    // after that they can't be swapped, so a lineup never changes mid-game.
+    function teamsSetOnce() {
+      return !('teams' in resource.data)
+        ? (!('teams' in request.resource.data) || request.resource.data.teams is list)
+        : request.resource.data.teams == resource.data.teams;
+    }
+
     function isValidResult(sessionId) {
       let result = request.resource.data.result;
       // A finished game is exactly one side on 10 with the other below it.
@@ -69,11 +77,12 @@ service cloud.firestore {
     match /sessions/{sessionId} {
       allow read: if true;
       allow create: if isSignedIn();
-      // Three distinct updates: the "game on" claim plus the join counter (the transaction
-      // on this doc is what serialises simultaneous joins), the final score, and a
-      // cancellation. Any player in the match may write one of the last two, once.
+      // Three distinct updates: the bookkeeping while a match fills (the join counter,
+      // whose transaction on this doc is what serialises simultaneous joins, the "game on"
+      // and "timed out" claims, and the teams), the final score, and a cancellation. Any
+      // player in the match may write one of the last two, once.
       allow update: if isSignedIn() && (
-        changesOnly(['readyNotifiedAt', 'playerCount', 'expiredNotifiedAt'])
+        (changesOnly(['readyNotifiedAt', 'playerCount', 'expiredNotifiedAt', 'teams']) && teamsSetOnce())
         || (changesOnly(['result']) && isValidResult(sessionId))
         || (changesOnly(['cancelled']) && isValidCancel(sessionId))
       );

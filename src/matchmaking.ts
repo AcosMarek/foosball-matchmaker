@@ -208,6 +208,15 @@ export const resultWindowRemaining = (startedAt: Date, now: Date = new Date()): 
 export const resultDeadline = (startedAt: Date): Date =>
   new Date(startedAt.getTime() + RESULT_WINDOW_MS);
 
+// How long after a match filled its players are nudged to log the score, if nobody has.
+// A game takes ten minutes or so; api/send.ts holds the same figure and has the last word.
+export const REMIND_AFTER_MINUTES = 15;
+const REMIND_AFTER_MS = REMIND_AFTER_MINUTES * MS_PER_MINUTE;
+
+// Time (ms) until that nudge is due; 0 once it is.
+export const reminderDueIn = (filledAt: Date, now: Date = new Date()): number =>
+  Math.max(0, REMIND_AFTER_MS - (now.getTime() - filledAt.getTime()));
+
 export const RESET_MINUTES = 5;
 const RESET_MS = RESET_MINUTES * MS_PER_MINUTE;
 

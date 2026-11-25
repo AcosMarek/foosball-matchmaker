@@ -19,12 +19,15 @@ import {
   Row,
   TextButton,
 } from "../ui";
+import type { RatingStats } from "../ratings";
 import type { Session } from "../types";
 
 type Props = {
   user: User;
   session: Session;
   tableCode: string;
+  // Null while ratings are loading or unavailable; the Slack post then leaves them out.
+  stats: RatingStats | null;
 };
 
 const Teams = styled.div`
@@ -61,7 +64,7 @@ const formatClock = (date: Date): string =>
 
 const parseGoals =(value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
 
-export const RecordResultCard = ({ user, session, tableCode }: Props) => {
+export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => {
   const [disposition, setDisposition] = useState<MatchDisposition | null>(null);
   const [red, setRed] = useState("");
   const [blue, setBlue] = useState("");
@@ -72,7 +75,7 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
 
   useEffect(() => {
     let cancelled = false;
-    getSessionDisposition(session.id, session.targetPlayers)
+    getSessionDisposition(session.id, session.targetPlayers, session.teams)
       .then((next) => {
         if (!cancelled) {
           setDisposition(next);
@@ -85,7 +88,7 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [session.id, session.targetPlayers]);
+  }, [session.id, session.targetPlayers, session.teams]);
 
   const handleSubmit = async () => {
     const score = { red: parseGoals(red), blue: parseGoals(blue) };
@@ -94,7 +97,7 @@ export const RecordResultCard = ({ user, session, tableCode }: Props) => {
       return;
     }
 
-    await close(() => recordMatchResult(user, session.id, tableCode, score, disposition));
+    await close(() => recordMatchResult(user, session.id, tableCode, score, disposition, stats));
   };
 
   // Saving a score and cancelling both close the match, and the rules let that happen

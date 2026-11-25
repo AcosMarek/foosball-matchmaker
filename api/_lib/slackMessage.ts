@@ -1,4 +1,6 @@
-export type RosterPlayer = { name: string; position: string };
+// `rating` is the Elo rating the player took into the match, and `delta` what a logged
+// result did to it. Both are optional: the app leaves them out while ratings are loading.
+export type RosterPlayer = { name: string; position: string; rating?: number; delta?: number };
 export type Roster = { color: string; players: RosterPlayer[] };
 
 // Slack shortcodes rather than literal emoji so rendering never depends on source encoding.
@@ -18,6 +20,17 @@ const CALL_TO_ACTION: Record<string, string> = {
 };
 
 const MAX_NAME_LENGTH = 60;
+// Ratings start at 1000 and move at most 32 a game, so anything outside these bounds is
+// not a rating the app produced.
+const MAX_RATING = 5000;
+const MAX_DELTA = 100;
+
+// A number that isn't a plausible whole rating is dropped rather than failing the roster:
+// the lineup is still worth posting without it.
+const wholeNumber = (value: unknown, min: number, max: number): number | undefined =>
+  typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+    ? value
+    : undefined;
 
 // Slack mrkdwn only interprets these three characters, so escaping them stops a relayed
 // message from injecting links or markup into the channel.
@@ -40,7 +53,12 @@ export const parseRoster = (value: unknown): Roster[] => {
 
     const players: RosterPlayer[] = [];
     for (const rawPlayer of team.players.slice(0, 2)) {
-      const player = rawPlayer as { name?: unknown; position?: unknown };
+      const player = rawPlayer as {
+        name?: unknown;
+        position?: unknown;
+        rating?: unknown;
+        delta?: unknown;
+      };
       if (
         typeof player.name !== "string" ||
         typeof player.position !== "string" ||
@@ -49,7 +67,15 @@ export const parseRoster = (value: unknown): Roster[] => {
         return [];
       }
 
-      players.push({ name: player.name.slice(0, MAX_NAME_LENGTH), position: player.position });
+      const rating = wholeNumber(player.rating, 0, MAX_RATING);
+      const delta = wholeNumber(player.delta, -MAX_DELTA, MAX_DELTA);
+      players.push({
+        name: player.name.slice(0, MAX_NAME_LENGTH),
+        position: player.position,
+        ...(rating === undefined ? {} : { rating }),
+        // A change means nothing without the rating it applies to.
+        ...(rating === undefined || delta === undefined ? {} : { delta }),
+      });
     }
 
     if (players.length === 0) {
@@ -61,11 +87,43 @@ export const parseRoster = (value: unknown): Roster[] => {
   return roster;
 };
 
+// "+16", "−16" or "±0". A real minus sign, so a loss lines up with a gain.
+const formatDelta = (delta: number): string =>
+  delta > 0 ? `+${delta}` : delta < 0 ? `−${-delta}` : "±0";
+
+// "1042" going into a match, or "1042 → 1058 (+16)" once its result is in.
+const ratingText = ({ rating, delta }: RosterPlayer): string => {
+  if (rating === undefined) {
+    return "";
+  }
+
+  return delta === undefined
+    ? `  ·  ${rating}`
+    : `  ·  ${rating} → ${rating + delta} (${formatDelta(delta)})`;
+};
+
+// A pair's strength is the average of its two ratings, the same figure the app uses to
+// work out who was favoured. Shown before the game only; afterwards the changes say more.
+const teamAverageText = (team: Roster): string => {
+  const ratings = team.players.map((player) => player.rating);
+  const settled = team.players.some((player) => player.delta !== undefined);
+  if (ratings.length < 2 || settled || ratings.some((rating) => rating === undefined)) {
+    return "";
+  }
+
+  const total = (ratings as number[]).reduce((sum, rating) => sum + rating, 0);
+
+  return `  ·  avg ${Math.round(total / ratings.length)}`;
+};
+
 const rosterField = (team: Roster) => ({
   type: "mrkdwn",
   text: [
-    `${TEAM_ICON[team.color]}  *${escapeSlack(team.color)}*`,
-    ...team.players.map((player) => `${POSITION_ICON[player.position]}  ${escapeSlack(player.name)}`),
+    `${TEAM_ICON[team.color]}  *${escapeSlack(team.color)}*${teamAverageText(team)}`,
+    ...team.players.map(
+      (player) =>
+        `${POSITION_ICON[player.position]}  ${escapeSlack(player.name)}${ratingText(player)}`,
+    ),
   ].join("\n"),
 });
 
@@ -79,6 +137,22 @@ export const buildSlackPayload = (
   roster: Roster[],
 ) => {
   const body = escapeSlack(text);
+
+  // A result needs no button, but it is worth more than one line when the app sent the
+  // ratings along: the score, then what the game did to each player.
+  const rated = roster.length === 2 && roster.every((team) =>
+    team.players.every((player) => player.delta !== undefined),
+  );
+  if (event === "result" && rated) {
+    return {
+      text: body,
+      blocks: [
+        { type: "section", text: { type: "mrkdwn", text: `:checkered_flag:  ${body}` } },
+        { type: "section", fields: roster.map(rosterField) },
+      ],
+    };
+  }
+
   const label = CALL_TO_ACTION[event];
   if (!appUrl || !label) {
     return { text: body };
