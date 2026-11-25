@@ -114,8 +114,8 @@ export const DispositionAlert = ({ disposition, waiting, stats }: Props) => (
       {disposition.teams.map((team, teamIndex) => (
         <Fragment key={team.color}>
           {teamIndex > 0 && <Versus aria-hidden>VS</Versus>}
-          <Team style={{ borderLeftColor: team.colorHex }}>
-            <TeamName style={{ color: team.colorHex }}>{team.color}</TeamName>
+          <Team style={{ borderLeftColor: team.cssColor }}>
+            <TeamName style={{ color: team.cssColor }}>{team.color}</TeamName>
             <TeamPlayers>
               {team.players.map((entry, index) => (
                 <span key={entry.player.uid}>

@@ -1,6 +1,6 @@
 import {
   buildMatchDisposition,
-  teamColorHex,
+  teamCssColor,
   type MatchDisposition,
   type MatchPlayer,
   type MatchSize,
@@ -93,7 +93,7 @@ export const dispositionFromTeams = (
   const [red, blue] = teams.map(
     (team): TeamDisposition => ({
       color: team.color,
-      colorHex: teamColorHex(team.color),
+      cssColor: teamCssColor(team.color),
       players: team.players.map((player) => ({
         player: { uid: player.uid, displayName: player.displayName },
         position: player.position,

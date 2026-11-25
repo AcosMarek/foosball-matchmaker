@@ -135,8 +135,8 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
       {disposition && (
         <Teams>
           {disposition.teams.map((team) => (
-            <Team key={team.color} style={{ borderLeftColor: team.colorHex }}>
-              <TeamName style={{ color: team.colorHex }}>{team.color}</TeamName>
+            <Team key={team.color} style={{ borderLeftColor: team.cssColor }}>
+              <TeamName style={{ color: team.cssColor }}>{team.color}</TeamName>
               <span>{team.players.map((entry) => entry.player.displayName).join(", ")}</span>
             </Team>
           ))}

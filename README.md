@@ -5,6 +5,9 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 ## Features
 
 - Google authentication
+- Light and dark theme: follows the device, with a switch at the foot of the page to pin
+  either (`src/theme.ts`). All colours are CSS variables in `src/ui.tsx`, with one block
+  of dark values; components never name a colour directly
 - Admin-only table creation with auto-generated 6-character table codes
 - Admin-only "who gets pinged" list per table (`api/members.ts`): everyone registered on
   the table and whether a device of theirs is signed up for push. Only the server can see

@@ -20,6 +20,7 @@ import {
 import type { Departure, FoosballTable } from "./types";
 import { AuthBar, SignInPanel } from "./components/AuthCard";
 import { LeaveTable } from "./components/LeaveTable";
+import { ThemeSwitch } from "./components/ThemeSwitch";
 import { AdminTableCard } from "./components/AdminTableCard";
 import { InstallPrompt } from "./components/InstallPrompt";
 import { NotificationPrompt } from "./components/NotificationPrompt";
@@ -351,6 +352,8 @@ export default function App() {
           onCreated={setSelectedTable}
         />
       )}
+
+      <ThemeSwitch />
 
       {/* Last on the page on purpose: leaving is rare, and nobody should do it by accident. */}
       {user && selectedTable && (

@@ -123,6 +123,12 @@ const useSlideOnReorder = (
     }
 
     const rows = Array.from(list.current?.children ?? []) as HTMLElement[];
+    // Read from the theme at the moment it is needed: script-driven animations can't
+    // take a CSS variable, and the highlight is a different green in the dark theme.
+    const flashColor =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--md-sys-color-primary-container")
+        .trim() || "#b7f397";
     const heights = new Map(rows.map((row) => [row.dataset.uid ?? "", row.offsetHeight]));
     // Distance from the top of the list to a row, were the rows stacked in `sequence`.
     const topIn = (sequence: string[], uid: string): number => {
@@ -162,7 +168,7 @@ const useSlideOnReorder = (
           // browsers don't accept a keyframe that leaves the end colour to be inferred.
           row.animate(
             [
-              { backgroundColor: "#b7f397" },
+              { backgroundColor: flashColor },
               { backgroundColor: getComputedStyle(row).backgroundColor },
             ],
             { duration: SLIDE_MS * 2 },

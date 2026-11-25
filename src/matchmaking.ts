@@ -97,7 +97,9 @@ export type TeamPlayer = {
 
 export type TeamDisposition = {
   color: string;
-  colorHex: string;
+  // The team's colour as CSS: a theme variable, so it is a different shade in the dark
+  // theme. For styling only; it is never stored.
+  cssColor: string;
   players: TeamPlayer[];
 };
 
@@ -106,11 +108,11 @@ export type MatchDisposition = {
   teams: [TeamDisposition, TeamDisposition];
 };
 
-const RED = { color: "Red", colorHex: "#d32f2f" };
-const BLUE = { color: "Blue", colorHex: "#1976d2" };
+const RED = { color: "Red", cssColor: "var(--team-red)" };
+const BLUE = { color: "Blue", cssColor: "var(--team-blue)" };
 
-export const teamColorHex = (color: string): string =>
-  color === RED.color ? RED.colorHex : BLUE.colorHex;
+export const teamCssColor = (color: string): string =>
+  color === RED.color ? RED.cssColor : BLUE.cssColor;
 
 // Splits the first `size` joined players (in join order) into two colored teams.
 // 1v1 (size 2): one solo player per color, who plays the whole table.

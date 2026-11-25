@@ -1,6 +1,6 @@
 import { useState } from "react";
 import styled from "@emotion/styled";
-import { matchSizeLabel, teamColorHex } from "../matchmaking";
+import { matchSizeLabel, teamCssColor } from "../matchmaking";
 import { formatDelta, type MatchRating } from "../ratings";
 import { Delta, Rating, TextButton } from "../ui";
 
@@ -120,7 +120,7 @@ export const RatedMatchList = ({
               <Sides>
                 {match.teams.map((team, side) => (
                   <Side key={team.color}>
-                    <SideName style={{ color: teamColorHex(team.color) }}>{team.color}</SideName>
+                    <SideName style={{ color: teamCssColor(team.color) }}>{team.color}</SideName>
                     <Players>
                       {team.players.map((player, index) => (
                         <span key={player.uid}>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import styled from "@emotion/styled";
-import { matchSizeLabel, teamColorHex } from "../matchmaking";
+import { matchSizeLabel, teamCssColor } from "../matchmaking";
 import { prefersReducedMotion } from "../motion";
 import { formatDelta, type MatchRating } from "../ratings";
 import { Eyebrow, Icon, IconButton, OutlinedCard } from "../ui";
@@ -134,7 +134,7 @@ export const ResultCelebration = ({ session, match, currentUid, onClose }: Props
   const result = session.result;
   const redWon = !!result && result.red > result.blue;
   const winner = redWon ? "Red" : "Blue";
-  const winnerHex = teamColorHex(winner);
+  const winnerColor = teamCssColor(winner);
 
   const teams = match?.teams ?? session.teams;
   const side = teams
@@ -154,7 +154,14 @@ export const ResultCelebration = ({ session, match, currentUid, onClose }: Props
 
   // Thrown once per match: each piece gets its own direction, spin and head start.
   const pieces = useMemo(() => {
-    const colors = [winnerHex, winnerHex, "#386a20", "#19686a", "#b7f397"];
+    // Theme colours, so the confetti stays visible on a dark card too.
+    const colors = [
+      winnerColor,
+      winnerColor,
+      "var(--md-sys-color-primary)",
+      "var(--md-sys-color-tertiary)",
+      "var(--md-sys-color-primary)",
+    ];
 
     return Array.from({ length: CONFETTI_PIECES }, (_, index) => {
       const angle = Math.random() * Math.PI * 2;
@@ -168,7 +175,7 @@ export const ResultCelebration = ({ session, match, currentUid, onClose }: Props
         delay: Math.round(Math.random() * 150),
       };
     });
-  }, [winnerHex]);
+  }, [winnerColor]);
 
   if (!result) {
     return null;
@@ -209,9 +216,9 @@ export const ResultCelebration = ({ session, match, currentUid, onClose }: Props
         Full time · {matchSizeLabel(session.targetPlayers)}
       </Eyebrow>
       <Score>
-        <span style={redWon ? { color: winnerHex } : undefined}>Red {result.red}</span>
+        <span style={redWon ? { color: winnerColor } : undefined}>Red {result.red}</span>
         {" – "}
-        <span style={redWon ? undefined : { color: winnerHex }}>{result.blue} Blue</span>
+        <span style={redWon ? undefined : { color: winnerColor }}>{result.blue} Blue</span>
       </Score>
       {showRating ? (
         <>

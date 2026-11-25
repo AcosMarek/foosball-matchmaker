@@ -12,6 +12,33 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-title" content="Foosball" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- The page's colour before the app has loaded, so a dark-theme visit doesn't open on
+         a white flash. The script applies a theme the player pinned (see src/theme.ts, which
+         owns the "foosball:theme" key and the data-theme attribute). -->
+    <script>
+      try {
+        var theme = localStorage.getItem("foosball:theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+        }
+      } catch (error) {
+        /* Storage unavailable: follow the device. */
+      }
+    </script>
+    <style>
+      html {
+        background: #edf1ea;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) {
+          background: #11140f;
+        }
+      }
+      html[data-theme="dark"] {
+        background: #11140f;
+      }
+    </style>
     <title>Foosball Matchmaker</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -1,10 +1,73 @@
 import styled from "@emotion/styled";
 import { Global, css } from "@emotion/react";
 
+// The dark counterpart of the light scheme below: the same green seed, as Material 3
+// derives it for dark surfaces. Kept as one block because it applies in two situations
+// (the device asks for dark, or the player chose it), and both must get identical values.
+// Every colour in the app comes from these names, so nothing else needs to know the theme.
+const darkScheme = css`
+  color-scheme: dark;
+
+  --md-sys-color-primary: #9cd67d;
+  --md-sys-color-on-primary: #0d3900;
+  --md-sys-color-primary-container: #205107;
+  --md-sys-color-on-primary-container: #b7f397;
+  --md-sys-color-secondary: #bdcbb0;
+  --md-sys-color-on-secondary: #283420;
+  --md-sys-color-secondary-container: #3e4a36;
+  --md-sys-color-on-secondary-container: #d9e7cb;
+  --md-sys-color-tertiary: #a0cfd0;
+  --md-sys-color-on-tertiary: #003738;
+  --md-sys-color-tertiary-container: #1e4e50;
+  --md-sys-color-on-tertiary-container: #bcebec;
+  --md-sys-color-error: #ffb4ab;
+  --md-sys-color-on-error: #690005;
+  --md-sys-color-error-container: #93000a;
+  --md-sys-color-on-error-container: #ffdad6;
+  --md-sys-color-background: #11140f;
+  --md-sys-color-on-background: #e1e4da;
+  --md-sys-color-surface: #11140f;
+  --md-sys-color-on-surface: #e1e4da;
+  --md-sys-color-surface-variant: #424940;
+  --md-sys-color-on-surface-variant: #c2c9bc;
+  --md-sys-color-outline: #8c9388;
+  --md-sys-color-outline-variant: #424940;
+  /* These five follow how the app uses them, not Material's dark ordering. In this app
+     "lowest" is the card and input surface and "high" is what sits on a card (the own-row
+     highlight, chips, the dialog). On a dark page a raised surface has to be lighter than
+     what is under it, so the steps climb from the page colour upwards. */
+  --md-sys-color-surface-container-lowest: #1d211b;
+  --md-sys-color-surface-container-low: #1f231d;
+  --md-sys-color-surface-container: #222620;
+  --md-sys-color-surface-container-high: #272b25;
+  --md-sys-color-surface-container-highest: #32362f;
+
+  --app-warning: #f2be48;
+  /* The light theme's red and blue are too dark to read on these surfaces. */
+  --team-red: #ff8a80;
+  --team-blue: #82b1ff;
+
+  --md-state-on-primary-08: rgba(13, 57, 0, 0.08);
+  --md-state-on-primary-12: rgba(13, 57, 0, 0.12);
+  --md-state-primary-08: rgba(156, 214, 125, 0.08);
+  --md-state-primary-12: rgba(156, 214, 125, 0.12);
+  --md-state-on-secondary-container-08: rgba(217, 231, 203, 0.08);
+  --md-state-on-secondary-container-12: rgba(217, 231, 203, 0.12);
+  --md-state-disabled-bg: rgba(225, 228, 218, 0.12);
+  --md-state-disabled-content: rgba(225, 228, 218, 0.38);
+  --md-pulse: 156, 214, 125;
+
+  /* Shadows barely show on a dark page; the lighter card surfaces do the lifting. */
+  --md-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px 1px rgba(0, 0, 0, 0.3);
+  --md-elevation-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 6px 2px rgba(0, 0, 0, 0.35);
+`;
+
 export const GlobalStyles = () => (
   <Global
     styles={css`
       :root {
+        color-scheme: light;
+
         /* Material 3 color scheme — light, green seed */
         --md-sys-color-primary: #386a20;
         --md-sys-color-on-primary: #ffffff;
@@ -38,14 +101,23 @@ export const GlobalStyles = () => (
 
         /* App accent — amber, used for countdown warnings */
         --app-warning: #815600;
+        /* The two sides of the table. Deep enough to read as small text on the grey rows
+           of the match history (4.8:1 and 4.9:1; the brighter #d32f2f and #1976d2 used
+           before fell just short of the 4.5:1 that small text needs). */
+        --team-red: #c62828;
+        --team-blue: #1565c0;
 
         /* State layers */
         --md-state-on-primary-08: rgba(255, 255, 255, 0.08);
         --md-state-on-primary-12: rgba(255, 255, 255, 0.12);
         --md-state-primary-08: rgba(56, 106, 32, 0.08);
         --md-state-primary-12: rgba(56, 106, 32, 0.12);
+        --md-state-on-secondary-container-08: rgba(19, 31, 13, 0.08);
+        --md-state-on-secondary-container-12: rgba(19, 31, 13, 0.12);
         --md-state-disabled-bg: rgba(26, 28, 24, 0.12);
         --md-state-disabled-content: rgba(26, 28, 24, 0.38);
+        /* The primary colour as bare red, green, blue, for the pulse's fading ring. */
+        --md-pulse: 56, 106, 32;
 
         /* Elevation */
         --md-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.2), 0 1px 3px 1px rgba(0, 0, 0, 0.1);
@@ -56,6 +128,19 @@ export const GlobalStyles = () => (
         --md-shape-medium: 12px;
         --md-shape-large: 16px;
         --md-shape-full: 9999px;
+      }
+
+      /* Dark when the device asks for it, unless the player picked light; and dark when
+         the player picked it, whatever the device says. The choice is the data-theme
+         attribute on the root element, set in src/theme.ts. */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          ${darkScheme}
+        }
+      }
+
+      :root[data-theme="dark"] {
+        ${darkScheme}
       }
 
       * {
@@ -82,13 +167,13 @@ export const GlobalStyles = () => (
 
       @keyframes pulse {
         0% {
-          box-shadow: 0 0 0 0 rgba(56, 106, 32, 0.4);
+          box-shadow: 0 0 0 0 rgba(var(--md-pulse), 0.4);
         }
         70% {
-          box-shadow: 0 0 0 9px rgba(56, 106, 32, 0);
+          box-shadow: 0 0 0 9px rgba(var(--md-pulse), 0);
         }
         100% {
-          box-shadow: 0 0 0 0 rgba(56, 106, 32, 0);
+          box-shadow: 0 0 0 0 rgba(var(--md-pulse), 0);
         }
       }
 
@@ -381,11 +466,17 @@ export const TonalButton = styled(Button)`
   color: var(--md-sys-color-on-secondary-container);
   &:hover:not(:disabled) {
     background-color: var(--md-sys-color-secondary-container);
-    background-image: linear-gradient(rgba(19, 31, 13, 0.08), rgba(19, 31, 13, 0.08));
+    background-image: linear-gradient(
+      var(--md-state-on-secondary-container-08),
+      var(--md-state-on-secondary-container-08)
+    );
     box-shadow: var(--md-elevation-1);
   }
   &:active:not(:disabled) {
-    background-image: linear-gradient(rgba(19, 31, 13, 0.12), rgba(19, 31, 13, 0.12));
+    background-image: linear-gradient(
+      var(--md-state-on-secondary-container-12),
+      var(--md-state-on-secondary-container-12)
+    );
     box-shadow: none;
   }
   &:disabled {
