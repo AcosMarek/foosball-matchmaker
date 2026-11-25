@@ -10,7 +10,7 @@ import { ratingOf, type RatingStats } from "../ratings";
 import { Badge, CountdownRing, Icon, LiveDot, Rating, StatValue } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { DispositionAlert } from "./DispositionAlert";
-import { IdleBall } from "./IdleBall";
+import { IdleTable } from "./IdleTable";
 
 const RESET_TOTAL_MS = RESET_MINUTES * MS_PER_MINUTE;
 const COOLDOWN_TOTAL_MS = START_COOLDOWN_MINUTES * MS_PER_MINUTE;
@@ -23,6 +23,8 @@ const StatusBlock = styled.div`
 
 const Idle = styled.p`
   margin: 0;
+  /* Sits under the little table, which is centred. */
+  text-align: center;
   font-size: 0.95rem;
   color: var(--md-sys-color-on-surface-variant);
 `;
@@ -151,7 +153,7 @@ export const MatchStatus = ({
   if (!liveSession || !activeSession) {
     return (
       <StatusBlock>
-        <IdleBall />
+        <IdleTable />
         <Idle>No match running. Start one above.</Idle>
       </StatusBlock>
     );
