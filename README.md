@@ -35,6 +35,10 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 - Balanced 2v2 teams (`src/teams.ts`): when a match fills, its four players are split into
   the two sides with the closest combined rating, front and back go to whoever is due a
   turn there, and the teams are stored on the session so they can't shift mid-game
+- A match that times out resets quietly: it is not announced, so trying to start a game
+  never costs the person who tried
+- A cancelled match can still be scored within the hour by any player in it, and the
+  score then stands, so cancelling can't be used to dodge a loss
 - Any player in a match can log its score or cancel it, for an hour after it started;
   players are nudged by push if no score is in 15 minutes after the match filled
 - Match commentary (`src/commentary.ts`): every scored match gets one line ("Nora's first

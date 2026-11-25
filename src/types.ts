@@ -26,8 +26,12 @@ export type Session = {
   targetPlayers: MatchSize;
   playerCount: number;
   result: MatchResult | null;
-  // Called off by one of its players: it gets no score and changes nobody's rating.
+  // Called off by one of its players. It then counts for nothing, unless someone in the
+  // match logs a score over the cancellation within the hour.
   cancelled: boolean;
+  // Who called it off (account id and name); empty unless cancelled.
+  cancelledBy: string;
+  cancelledByName: string;
   // The teams picked when the match filled, [Red, Blue]. Null until then, and for matches
   // from before teams were stored, whose teams follow the join order.
   teams: [RatedTeam, RatedTeam] | null;

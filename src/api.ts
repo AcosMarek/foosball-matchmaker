@@ -72,7 +72,7 @@ type NotifyTeam = {
 
 type NotifyPayload = {
   message: string;
-  event: "start" | "join" | "ready" | "result" | "expired" | "remind";
+  event: "start" | "join" | "ready" | "result" | "remind";
   recipients?: string[];
   tableCode?: string;
   teams?: NotifyTeam[];
@@ -435,44 +435,6 @@ export const notifyJoin = async (
   });
 };
 
-// Announces a match that ran out of time before filling. The claim keeps it to one post
-// however many clients notice the window lapse at the same moment.
-export const notifyMatchExpired = async (
-  user: User,
-  sessionId: string,
-  tableCode: string,
-  targetPlayers: MatchSize,
-): Promise<void> => {
-  const sessionRef = doc(db, "sessions", sessionId);
-  const claimed = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(sessionRef);
-    if (!snap.exists() || snap.data().expiredNotifiedAt || snap.data().readyNotifiedAt) {
-      return false;
-    }
-
-    tx.update(sessionRef, { expiredNotifiedAt: serverTimestamp() });
-    return true;
-  });
-  if (!claimed) {
-    return;
-  }
-
-  // A join can still land between the claim and this read; announcing a washout next to
-  // a "Game on!" would contradict it.
-  const players = await readSessionPlayers(sessionId);
-  if (players.length >= targetPlayers) {
-    return;
-  }
-
-  await sendNotification(user, {
-    message: `No game — the ${matchSizeLabel(targetPlayers)} on ${tableCode} timed out with ${
-      players.length
-    }/${targetPlayers} players.`,
-    tableCode,
-    event: "expired",
-  });
-};
-
 export const getLatestSessionStart = async (tableCode: string): Promise<Date | null> => {
   const snapshot = await getDocs(
     query(
@@ -667,9 +629,10 @@ export const remindToScore = (user: User, sessionId: string, tableCode: string):
   sendNotification(user, { message: "", tableCode, event: "remind", sessionId });
 
 // Calls a match off: someone had to leave, or there is no fair score to log. It then has
-// no result, so it never reaches the ratings, and it can't be scored afterwards. The same
-// people who may log the score may cancel, within the same hour; the rules enforce it and
-// keep who cancelled on the session.
+// no result, so it never reaches the ratings. The same people who may log the score may
+// cancel, within the same hour; the rules enforce it and keep who cancelled on the
+// session. A cancellation is not the last word: until the hour is up any player in the
+// match can still log a score over it, so cancelling can't be used to dodge a loss.
 export const cancelMatch = async (user: User, sessionId: string): Promise<void> => {
   await updateDoc(doc(db, "sessions", sessionId), {
     cancelled: {

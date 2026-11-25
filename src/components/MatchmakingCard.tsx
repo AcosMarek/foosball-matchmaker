@@ -5,7 +5,6 @@ import {
   ensureTeams,
   joinSession,
   notifyJoin,
-  notifyMatchExpired,
   notifyTableMembers,
   registerOnTable,
   startSession,
@@ -118,26 +117,9 @@ export const MatchmakingCard = ({
     ? canStartMatch(activeSession.startedAt, new Date(now)).waitMs
     : 0;
 
-  // Only clients with the table open can notice the window lapse, so whoever sees it
-  // first announces and the claim collapses the rest.
-  const expiryAnnounced = useRef("");
-  useEffect(() => {
-    if (!user || !activeSession || !selectedTable || phase !== "expired") {
-      return;
-    }
-    if (expiryAnnounced.current === activeSession.id) {
-      return;
-    }
-
-    expiryAnnounced.current = activeSession.id;
-    void notifyMatchExpired(
-      user,
-      activeSession.id,
-      selectedTable,
-      activeSession.targetPlayers,
-    ).catch((error) => console.error("notifyMatchExpired failed", error));
-  }, [user, activeSession, selectedTable, phase]);
-
+  // A match that times out simply resets. It used to be announced in Slack ("No game,
+  // timed out with 1/4 players"), which singled out the one person who had tried to get a
+  // game going; trying must never cost anything.
   // The join that fills a match stores its teams. If that client dropped out before it
   // could, any player still looking at the full match stores them instead, after a pause
   // that lets the usual path go first. Waits for ratings, since storing without them

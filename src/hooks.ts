@@ -65,6 +65,8 @@ const readSession = (snapshot: QueryDocumentSnapshot<DocumentData>): Session | n
         }
       : null,
     cancelled: !!data.cancelled,
+    cancelledBy: String(data.cancelled?.by || ""),
+    cancelledByName: String(data.cancelled?.byName || ""),
     teams: parseResultTeams(data.teams),
     readyAt: toDate(data.readyNotifiedAt),
     reminded: !!data.remindNotifiedAt,
@@ -221,8 +223,10 @@ export const useRecentSessions = (selectedTable: string): Session[] => {
   return sessions;
 };
 
-// The filled matches the user played in that are still open (no score, not cancelled) and
-// young enough to log, oldest first. Usually one, but a new match started before the last one was logged
+// The filled matches the user played in that have no score yet and are young enough to
+// log, oldest first. A match someone else cancelled is among them: a cancellation can be
+// overridden with a score, so the other players are still asked. Whoever cancelled it is
+// not asked again. Usually one, but a new match started before the last one was logged
 // leaves two, and the earlier one must stay reachable while the later one is played.
 // Anyone in a match may log it, so being its starter is only the shortcut: for other
 // matches the lineup is looked up, once per match, to see whether the user was in one of
@@ -239,12 +243,12 @@ export const usePendingResults = (user: User | null, sessions: Session[]): Sessi
         .filter(
           (session) =>
             !session.result &&
-            !session.cancelled &&
+            !(session.cancelled && session.cancelledBy === uid) &&
             session.playerCount >= session.targetPlayers &&
             resultWindowRemaining(session.startedAt, new Date(now)) > 0,
         )
         .reverse(),
-    [sessions, now],
+    [sessions, now, uid],
   );
 
   // Re-filter the moment the oldest match's hour runs out, so its prompt goes away
@@ -328,7 +332,8 @@ export const useJustScored = (
   useEffect(() => {
     const scored = sessions.find((session) => session.result && waiting.current.has(session.id));
     for (const session of sessions) {
-      if (session.result || session.cancelled) {
+      // Only a score settles a match; a cancelled one may still be scored.
+      if (session.result) {
         waiting.current.delete(session.id);
       }
     }

@@ -13,23 +13,28 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
-    // Anyone who joined the match may close it, either with a score or by cancelling it.
-    // Join docs are keyed {sessionId}_{uid}, so membership is a single lookup. The first
-    // one to close it wins: once a match has a score or is cancelled nobody can change
-    // that, which matters now that more than one person is able to write it. A match can
-    // be closed for an hour after it started (the app's RESULT_WINDOW_MINUTES), so old
-    // games can't be logged late.
-    function canCloseMatch(sessionId) {
+    // Anyone who joined the match may close it, either with a score or by cancelling it,
+    // for an hour after it started (the app's RESULT_WINDOW_MINUTES), so old games can't
+    // be logged late. Join docs are keyed {sessionId}_{uid}, so membership is a single
+    // lookup.
+    //
+    // A score is final: the first one stands and nothing can follow it. A cancellation is
+    // not: within the same hour a score may still be logged over it. Otherwise whoever is
+    // losing could cancel before the winners log the result, and the game would vanish.
+    function canScoreMatch(sessionId) {
       return !('result' in resource.data)
-        && !('cancelled' in resource.data)
         && request.time < resource.data.startedAt + duration.value(1, 'h')
         && exists(/databases/$(database)/documents/sessionJoins/$(sessionId + '_' + request.auth.uid));
+    }
+
+    function canCancelMatch(sessionId) {
+      return canScoreMatch(sessionId) && !('cancelled' in resource.data);
     }
 
     // Cancelling records who did it and when, and nothing else.
     function isValidCancel(sessionId) {
       let cancelled = request.resource.data.cancelled;
-      return canCloseMatch(sessionId)
+      return canCancelMatch(sessionId)
         && cancelled.keys().hasOnly(['by', 'byName', 'at'])
         && cancelled.by == request.auth.uid
         && cancelled.byName is string && cancelled.byName.size() <= 100
@@ -47,7 +52,7 @@ service cloud.firestore {
     function isValidResult(sessionId) {
       let result = request.resource.data.result;
       // A finished game is exactly one side on 10 with the other below it.
-      return canCloseMatch(sessionId)
+      return canScoreMatch(sessionId)
         && result.recordedBy == request.auth.uid
         && result.red is int && result.blue is int
         && result.red >= 0 && result.blue >= 0

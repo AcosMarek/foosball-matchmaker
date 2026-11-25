@@ -17,7 +17,6 @@ const POSITION_ICON: Record<string, string> = {
 const CALL_TO_ACTION: Record<string, string> = {
   start: "Jump in",
   ready: "Open table",
-  expired: "Start a new match",
 };
 
 const MAX_NAME_LENGTH = 60;

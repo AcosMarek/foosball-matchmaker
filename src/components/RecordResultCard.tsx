@@ -10,6 +10,7 @@ import {
   type MatchDisposition,
 } from "../matchmaking";
 import {
+  Button,
   Eyebrow,
   Hint,
   Icon,
@@ -62,7 +63,33 @@ const ScoreInput = styled(Input)`
 const formatClock = (date: Date): string =>
   date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-const parseGoals =(value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
+const parseGoals = (value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
+
+// Cancelled matches this player has said were rightly cancelled, so they aren't asked
+// about them again on this device. A short list: such a match stops mattering after an hour.
+const DISMISSED_KEY = "foosball:cancelDismissed";
+
+const readDismissed = (): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(DISMISSED_KEY) || "[]");
+
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    // Storage unavailable or its content unreadable: nothing has been dismissed.
+    return [];
+  }
+};
+
+const rememberDismissed = (sessionId: string): void => {
+  try {
+    const ids = [...readDismissed().filter((id) => id !== sessionId), sessionId].slice(-20);
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(ids));
+  } catch {
+    // The card still goes away for this visit.
+  }
+};
 
 export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => {
   const [disposition, setDisposition] = useState<MatchDisposition | null>(null);
@@ -70,8 +97,15 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
   const [blue, setBlue] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  // Cancelling can't be undone, so it takes a second, explicit tap.
+  // Cancelling takes a second, explicit tap.
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // A match another player cancelled is still shown to the rest of them, because a score
+  // logged within the hour overrides the cancellation: that is what stops a losing player
+  // from making a game disappear. It starts as a short question, and goes away for good
+  // when the player agrees the match wasn't finished.
+  const overridable = session.cancelled;
+  const [logging, setLogging] = useState(false);
+  const [dismissed, setDismissed] = useState(() => readDismissed().includes(session.id));
 
   useEffect(() => {
     let cancelled = false;
@@ -115,7 +149,7 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
       setConfirmingCancel(false);
       setStatus(
         refused
-          ? "Not saved — this match already has a score or was cancelled, or its hour is up."
+          ? "Not saved — this match already has a score, or its hour is up."
           : `Couldn't save: ${message}`,
       );
     } finally {
@@ -123,13 +157,20 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
     }
   };
 
+  if (overridable && dismissed) {
+    return null;
+  }
+
+  const deadline = formatClock(resultDeadline(session.startedAt));
+
   return (
     <OutlinedCard>
       <Eyebrow>
         <Icon size={16} aria-hidden>
-          scoreboard
+          {overridable ? "block" : "scoreboard"}
         </Icon>
-        Result · {matchSizeLabel(session.targetPlayers)} at {formatClock(session.startedAt)}
+        {overridable ? "Cancelled" : "Result"} · {matchSizeLabel(session.targetPlayers)} at{" "}
+        {formatClock(session.startedAt)}
       </Eyebrow>
 
       {disposition && (
@@ -143,7 +184,29 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
         </Teams>
       )}
 
-      {confirmingCancel ? (
+      {overridable && !logging ? (
+        <>
+          <Row>
+            <Button type="button" onClick={() => setLogging(true)}>
+              <Icon aria-hidden>scoreboard</Icon>
+              Log the score
+            </Button>
+            <TextButton
+              type="button"
+              onClick={() => {
+                rememberDismissed(session.id);
+                setDismissed(true);
+              }}
+            >
+              It wasn't finished
+            </TextButton>
+          </Row>
+          <Hint>
+            {session.cancelledByName || "A player"} cancelled this match. If it was played to a
+            finish, you can still log the score until {deadline} and it will count.
+          </Hint>
+        </>
+      ) : confirmingCancel ? (
         <>
           <Row>
             <PrimaryButton
@@ -159,8 +222,8 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
             </TextButton>
           </Row>
           <Hint>
-            Cancel this match for everyone in it? No score is logged and nobody's rating
-            changes. It can't be undone.
+            Cancel this match? No score is logged and nobody's rating changes. The other
+            players can still log a score until {deadline} if they see it differently.
           </Hint>
         </>
       ) : (
@@ -190,22 +253,24 @@ export const RecordResultCard = ({ user, session, tableCode, stats }: Props) => 
               <Icon aria-hidden>check</Icon>
               Save result
             </PrimaryButton>
-            <TextButton
-              type="button"
-              onClick={() => {
-                setStatus("");
-                setConfirmingCancel(true);
-              }}
-              disabled={busy}
-            >
-              Cancel match
-            </TextButton>
+            {!overridable && (
+              <TextButton
+                type="button"
+                onClick={() => {
+                  setStatus("");
+                  setConfirmingCancel(true);
+                }}
+                disabled={busy}
+              >
+                Cancel match
+              </TextButton>
+            )}
           </Row>
           <Hint>
             {status ||
-              `You played in this match — anyone in it can log the final score or cancel it, once, until ${formatClock(
-                resultDeadline(session.startedAt),
-              )}. Games run to ${WINNING_GOALS}.`}
+              (overridable
+                ? `Saving a score puts this match back: it counts as played. Games run to ${WINNING_GOALS}.`
+                : `You played in this match — anyone in it can log the final score or cancel it, until ${deadline}. Games run to ${WINNING_GOALS}.`)}
           </Hint>
         </>
       )}

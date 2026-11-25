@@ -364,6 +364,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const kind = typeof event === "string" ? event : "";
   const session = typeof sessionId === "string" && SESSION_ID_RE.test(sessionId) ? sessionId : "";
   const reminder = kind === "remind";
+  // A match that timed out is no longer announced: the post only embarrassed whoever had
+  // tried to start a game. The app stopped sending this event; an older copy of it still
+  // open in someone's browser may not have, so it is dropped here as well.
+  const timedOut = kind === "expired";
   const roster = parseRoster(teams);
 
   let db: Firestore;
@@ -422,7 +426,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         return 0;
       }),
     // A reminder is for the four people in the match, not the channel.
-    table && !reminder
+    table && !reminder && !timedOut
       ? postToSlack(db, table, kind, body, roster).catch((err) => {
           console.error("send: slack failed", err);
           return false;

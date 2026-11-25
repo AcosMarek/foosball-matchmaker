@@ -105,7 +105,7 @@ describe("slack payload", () => {
     expect(payload).toEqual({ text: "Game on!" });
   });
 
-  it("gives start, ready and expired their own button", () => {
+  it("gives start and ready their own button", () => {
     const labelFor = (event: string) =>
       blocksOf(buildSlackPayload(APP_URL, "MG3586", event, "hi", []))
         .find((block) => block.type === "actions")
@@ -113,7 +113,6 @@ describe("slack payload", () => {
 
     expect(labelFor("start")).toBe("Jump in");
     expect(labelFor("ready")).toBe("Open table");
-    expect(labelFor("expired")).toBe("Start a new match");
   });
 
   const buttonUrl = (event: string, nowMs?: number) =>
@@ -123,7 +122,6 @@ describe("slack payload", () => {
 
   it("deep links back to the table", () => {
     expect(buttonUrl("ready")).toBe("https://foosball-matchmaker.web.app/?table=MG3586");
-    expect(buttonUrl("expired")).toBe("https://foosball-matchmaker.web.app/?table=MG3586");
   });
 
   it("makes the match-start button a join link stamped with when it was posted", () => {
