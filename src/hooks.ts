@@ -11,10 +11,15 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { getSessionDisposition, getSessionRosters, registerOnTable, remindToScore } from "./api";
+import { ensureRegistered, getSessionDisposition, getSessionRosters, remindToScore } from "./api";
 import { currentDevice, needsHomeScreenInstall } from "./platform";
 import { registerForPush } from "./push";
-import { readVisitedTables, upsertVisited, writeVisitedTables } from "./visitedTables";
+import {
+  readVisitedTables,
+  upsertVisited,
+  withoutVisited,
+  writeVisitedTables,
+} from "./visitedTables";
 import {
   buildMatchDisposition,
   canStartMatch,
@@ -77,6 +82,7 @@ export const useAuth = (): User | null => {
 export const useVisitedTables = (): {
   visited: FoosballTable[];
   addVisited: (table: FoosballTable) => void;
+  removeVisited: (code: string) => void;
 } => {
   const [visited, setVisited] = useState<FoosballTable[]>(() => readVisitedTables());
 
@@ -88,7 +94,15 @@ export const useVisitedTables = (): {
     });
   }, []);
 
-  return { visited, addVisited };
+  const removeVisited = useCallback((code: string) => {
+    setVisited((current) => {
+      const next = withoutVisited(current, code);
+      writeVisitedTables(next);
+      return next;
+    });
+  }, []);
+
+  return { visited, addVisited, removeVisited };
 };
 
 export const useActiveSession = (selectedTable: string): Session | null => {
@@ -498,7 +512,10 @@ export const useTableMemberCount = (user: User | null, selectedTable: string): n
 
     const q = query(collection(db, "tableMembers"), where("tableCode", "==", selectedTable));
 
-    return onSnapshot(q, (snapshot) => setCount(snapshot.size));
+    // A player who left, or was taken off the table, keeps a flagged record there.
+    return onSnapshot(q, (snapshot) =>
+      setCount(snapshot.docs.filter((member) => member.data().removed !== true).length),
+    );
   }, [user, selectedTable]);
 
   return count;
@@ -647,13 +664,34 @@ export const useNow = (active: boolean): number => {
 };
 
 // Registers the signed-in user as a member of the selected table so they receive
-// notifications when a match starts there. Runs automatically on table selection.
-export const useTableRegistration = (user: User | null, selectedTable: string): void => {
+// notifications when a match starts there. Runs automatically on table selection, which
+// includes the app reopening on the table it was last used with. That is why it stands
+// down for a player who left the table or was taken off it, and reports the table through
+// `onRemoved` so the app can stop showing it; joining again has to be deliberate.
+export const useTableRegistration = (
+  user: User | null,
+  selectedTable: string,
+  onRemoved: (tableCode: string) => void,
+): void => {
+  const notify = useRef(onRemoved);
+  notify.current = onRemoved;
+
   useEffect(() => {
     if (!user || !selectedTable) {
       return;
     }
 
-    void registerOnTable(user, selectedTable).catch(() => {});
+    let cancelled = false;
+    void ensureRegistered(user, selectedTable)
+      .then((registered) => {
+        if (!registered && !cancelled) {
+          notify.current(selectedTable);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, selectedTable]);
 };

@@ -1,9 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Timestamp, getFirestore, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore, type Firestore } from "firebase-admin/firestore";
 // The .js extensions are required: package.json sets "type": "module", so the compiled
 // function runs as ESM and Node will not resolve an extensionless relative import.
 import { ensureApp, verifyIdToken } from "./_lib/firebaseAdmin.js";
-import { summarizeReach, type MemberRow, type TokenRow } from "./_lib/members.js";
+import {
+  isActiveMember,
+  summarizeReach,
+  type MemberRow,
+  type TokenRow,
+} from "./_lib/members.js";
 import { chunk } from "./_lib/pushFanout.js";
 
 // Admin-only: who a table's match alerts reach. For every player registered on the table
@@ -12,10 +17,16 @@ import { chunk } from "./_lib/pushFanout.js";
 // lists side by side, and it does so only for callers listed in the `admins` collection.
 // The tokens themselves never leave the server: the reply carries counts and dates.
 //
+// With `removeUid` it first takes that player off the table, then answers with the list
+// as it now stands. Removal flags the player's record on this one table and touches
+// nothing else: their other tables, devices, rating and match history stay as they are.
+//
 // Env vars: FIREBASE_SERVICE_ACCOUNT and ALLOWED_ORIGIN, as in api/send.ts.
 const allowedOrigin = process.env.ALLOWED_ORIGIN ?? "*";
 
 const TABLE_CODE_RE = /^[A-Z0-9]{6}$/;
+// Firebase account ids: short, and never containing a slash that could reach another path.
+const UID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_MEMBERS = 500;
 // Firestore caps an `in` filter at 30 values.
 const TOKEN_QUERY_CHUNK = 30;
@@ -36,8 +47,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const { idToken, tableCode } = (req.body ?? {}) as { idToken?: unknown; tableCode?: unknown };
-  if (typeof idToken !== "string" || typeof tableCode !== "string" || !TABLE_CODE_RE.test(tableCode)) {
+  const { idToken, tableCode, removeUid } = (req.body ?? {}) as {
+    idToken?: unknown;
+    tableCode?: unknown;
+    removeUid?: unknown;
+  };
+  const removing = removeUid !== undefined && removeUid !== "";
+  if (
+    typeof idToken !== "string" ||
+    typeof tableCode !== "string" ||
+    !TABLE_CODE_RE.test(tableCode) ||
+    (removing && (typeof removeUid !== "string" || !UID_RE.test(removeUid)))
+  ) {
     res.status(400).json({ error: "Invalid payload" });
     return;
   }
@@ -65,6 +86,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    if (removing) {
+      // Records are keyed table + player, so this can only ever touch the one table. A
+      // player who isn't on it is left alone rather than given a "removed" record.
+      const record = db.collection("tableMembers").doc(`${tableCode}_${removeUid as string}`);
+      if ((await record.get()).exists) {
+        await record.set(
+          { removed: true, removedAt: FieldValue.serverTimestamp(), removedBy: callerUid },
+          { merge: true },
+        );
+        console.log(`members: removed a player from ${tableCode}`);
+      }
+    }
+
     const registered = await db
       .collection("tableMembers")
       .where("tableCode", "==", tableCode)
@@ -75,8 +109,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         uid: text(member.get("uid")),
         displayName: text(member.get("displayName")),
         email: text(member.get("email")),
+        removed: member.get("removed") === true,
       }))
-      .filter((member) => member.uid !== "");
+      .filter((member) => member.uid !== "" && isActiveMember(member));
 
     const snapshots = await Promise.all(
       chunk([...new Set(members.map((member) => member.uid))], TOKEN_QUERY_CHUNK).map((group) =>

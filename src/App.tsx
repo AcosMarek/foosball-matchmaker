@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { isValidTableCode, normalizeTableCode } from "./matchmaking";
-import { getTable } from "./api";
+import { getTable, leaveTable, registerOnTable } from "./api";
 import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
 import {
   useActiveSession,
@@ -17,8 +17,9 @@ import {
   useTableRegistration,
   useVisitedTables,
 } from "./hooks";
-import type { FoosballTable } from "./types";
+import type { Departure, FoosballTable } from "./types";
 import { AuthBar, SignInPanel } from "./components/AuthCard";
+import { LeaveTable } from "./components/LeaveTable";
 import { AdminTableCard } from "./components/AdminTableCard";
 import { InstallPrompt } from "./components/InstallPrompt";
 import { NotificationPrompt } from "./components/NotificationPrompt";
@@ -56,8 +57,11 @@ const initialTable = (): string => tableFromSearch() || storedTable();
 
 export default function App() {
   const user = useAuth();
-  const { visited, addVisited } = useVisitedTables();
+  const { visited, addVisited, removeVisited } = useVisitedTables();
   const [selectedTable, setSelectedTable] = useState<string>(initialTable);
+  // The table this player has just left or been taken off, kept so they can be told and
+  // offered a way back.
+  const [departed, setDeparted] = useState<Departure | null>(null);
   const activeSession = useActiveSession(selectedTable);
   const sessionPlayers = useSessionPlayers(user, activeSession?.id ?? null);
   const tableMemberCount = useTableMemberCount(user, selectedTable);
@@ -71,7 +75,17 @@ export default function App() {
     [stats, selectedTable],
   );
   const [statsOpen, setStatsOpen] = useState(false);
-  useTableRegistration(user, selectedTable);
+
+  // Puts a table out of sight on this device: off the list, deselected, and with a note
+  // saying so. Used both when the player leaves and when the app finds, on opening the
+  // table, that they are no longer on it.
+  const handleDeparted = (code: string, left: boolean) => {
+    const name = visited.find((table) => table.code === code)?.name || code;
+    removeVisited(code);
+    setSelectedTable((current) => (current === code ? "" : current));
+    setDeparted({ table: { code, name }, left });
+  };
+  useTableRegistration(user, selectedTable, (code) => handleDeparted(code, false));
 
   // Remember the last selected table so it is restored on the next visit.
   useEffect(() => {
@@ -137,9 +151,30 @@ export default function App() {
     };
   }, [selectedTable, visited, addVisited]);
 
+  // Joining by code, or rejoining, is a decision by the player, so it registers them
+  // outright (clearing any earlier removal) before the table is opened; merely opening a
+  // table would not.
   const handleJoinTable = (table: FoosballTable) => {
+    setDeparted(null);
     addVisited(table);
-    setSelectedTable(table.code);
+    if (!user) {
+      setSelectedTable(table.code);
+      return;
+    }
+
+    void registerOnTable(user, table.code)
+      .catch((error) => console.error("Couldn't join the table", error))
+      .finally(() => setSelectedTable(table.code));
+  };
+
+  const handleLeaveTable = async () => {
+    if (!user || !selectedTable) {
+      return;
+    }
+
+    const code = selectedTable;
+    await leaveTable(user, code);
+    handleDeparted(code, true);
   };
 
   const adminEmails = useMemo(
@@ -217,6 +252,8 @@ export default function App() {
             memberCount={tableMemberCount}
             onSelect={setSelectedTable}
             onJoin={handleJoinTable}
+            departed={departed}
+            onDismissDeparted={() => setDeparted(null)}
           />
 
           <MatchmakingCard
@@ -276,6 +313,11 @@ export default function App() {
           selectedTableName={selectedTableName}
           onCreated={setSelectedTable}
         />
+      )}
+
+      {/* Last on the page on purpose: leaving is rare, and nobody should do it by accident. */}
+      {user && selectedTable && (
+        <LeaveTable key={selectedTable} tableName={selectedTableName} onLeave={handleLeaveTable} />
       )}
     </Wrapper>
   );

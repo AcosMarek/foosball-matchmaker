@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { upsertVisited } from "./visitedTables";
+import { upsertVisited, withoutVisited } from "./visitedTables";
+
+describe("withoutVisited", () => {
+  const list = [
+    { code: "AAA111", name: "Bryne" },
+    { code: "BBB222", name: "Bergen" },
+  ];
+
+  it("drops the table and keeps the rest in order", () => {
+    expect(withoutVisited(list, "AAA111")).toEqual([{ code: "BBB222", name: "Bergen" }]);
+    expect(withoutVisited(list, " bbb222 ")).toEqual([{ code: "AAA111", name: "Bryne" }]);
+  });
+
+  it("returns the same list when the table isn't in it", () => {
+    expect(withoutVisited(list, "CCC333")).toBe(list);
+  });
+});
 
 describe("upsertVisited", () => {
   it("adds a new table to the front", () => {

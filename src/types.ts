@@ -6,6 +6,13 @@ export type FoosballTable = {
   name: string;
 };
 
+// A table the player is no longer on: `left` when they chose to go, false when the app
+// found on opening it that they had been taken off (or had left on another device).
+export type Departure = {
+  table: FoosballTable;
+  left: boolean;
+};
+
 export type MatchResult = MatchScore & {
   lineup: string;
   recordedAt: Date | null;

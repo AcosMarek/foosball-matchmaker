@@ -21,6 +21,15 @@ export const upsertVisited = (
   return [{ code, name }, ...rest].slice(0, MAX_VISITED);
 };
 
+// The list without one table. Pure: returns the same list when the table isn't in it.
+export const withoutVisited = (list: FoosballTable[], code: string): FoosballTable[] => {
+  const normalized = normalizeTableCode(code);
+
+  return list.some((entry) => entry.code === normalized)
+    ? list.filter((entry) => entry.code !== normalized)
+    : list;
+};
+
 export const readVisitedTables = (): FoosballTable[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

@@ -8,7 +8,12 @@ Foosball matchmaking web app built with **TypeScript + React + Emotion + Firebas
 - Admin-only table creation with auto-generated 6-character table codes
 - Admin-only "who gets pinged" list per table (`api/members.ts`): everyone registered on
   the table and whether a device of theirs is signed up for push. Only the server can see
-  both, and it answers only for accounts in the `admins` collection
+  both, and it answers only for accounts in the `admins` collection. Admins can remove a
+  player from the table there
+- Leaving a table: players can leave from the link at the bottom of the page. Leaving or
+  being removed flags the player's `tableMembers` record (`removed: true`) rather than
+  deleting it, so the app stops re-registering them when it reopens on that table; it
+  only affects that one table, and joining again by code (or the Rejoin button) clears it
 - QR code per table (`?table=ABC123`) for quick join flow
 - Register on table and receive browser notifications when a new matchmaking session starts
 - iPhone and iPad: iOS only delivers web push to a site added to the home screen, so

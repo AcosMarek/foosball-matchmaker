@@ -123,7 +123,11 @@ const sendNotification = async (
 // Admin-only: who a table's match alerts reach. Asked of the server, which is the only
 // place that can see both who is registered on the table and whose devices are signed up
 // for push; it answers only for accounts in the `admins` collection.
-export const getTableReach = async (user: User, tableCode: string): Promise<TableReach> => {
+const askMembers = async (
+  user: User,
+  tableCode: string,
+  removeUid?: string,
+): Promise<TableReach> => {
   if (!PUSH_ENDPOINT) {
     throw new Error("The notification sender isn't configured.");
   }
@@ -132,7 +136,7 @@ export const getTableReach = async (user: User, tableCode: string): Promise<Tabl
   const response = await fetch(new URL("members", PUSH_ENDPOINT), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken: await user.getIdToken(), tableCode }),
+    body: JSON.stringify({ idToken: await user.getIdToken(), tableCode, removeUid }),
   });
   if (response.status === 403) {
     throw new Error("This account isn't listed as an admin on the server.");
@@ -144,13 +148,55 @@ export const getTableReach = async (user: User, tableCode: string): Promise<Tabl
   return (await response.json()) as TableReach;
 };
 
+export const getTableReach = (user: User, tableCode: string): Promise<TableReach> =>
+  askMembers(user, tableCode);
+
+// Admin-only: takes a player off one table and resolves to the list as it then stands.
+// Their other tables, rating and match history are untouched, and they can rejoin.
+export const removeFromTable = (user: User, tableCode: string, uid: string): Promise<TableReach> =>
+  askMembers(user, tableCode, uid);
+
+const memberRef = (user: User, tableCode: string) =>
+  doc(db, "tableMembers", `${tableCode}_${user.uid}`);
+
+// Joins a table on purpose: adding its code, rejoining, or starting or entering a match
+// there. Writes the whole record, which also clears the mark left by having left the
+// table or been taken off it.
 export const registerOnTable = async (user: User, tableCode: string): Promise<void> => {
-  await setDoc(doc(db, "tableMembers", `${tableCode}_${user.uid}`), {
+  await setDoc(memberRef(user, tableCode), {
     tableCode,
     uid: user.uid,
     displayName: displayNameOf(user),
     joinedAt: serverTimestamp(),
     email: user.email || "",
+  });
+};
+
+// Keeps the player registered on the table the app happens to have open. Unlike
+// registerOnTable this is not a decision by the player (the app reopens on whichever table
+// was used last), so it respects a removal: it resolves to false, without writing, when
+// the player left this table or was taken off it.
+export const ensureRegistered = async (user: User, tableCode: string): Promise<boolean> => {
+  const existing = await getDoc(memberRef(user, tableCode));
+  if (existing.exists() && existing.data().removed === true) {
+    return false;
+  }
+
+  await registerOnTable(user, tableCode);
+  return true;
+};
+
+// Takes the player off a table at their own request. The record is flagged rather than
+// deleted so that every device of theirs stops signing them back up, not just this one.
+export const leaveTable = async (user: User, tableCode: string): Promise<void> => {
+  await setDoc(memberRef(user, tableCode), {
+    tableCode,
+    uid: user.uid,
+    displayName: displayNameOf(user),
+    email: user.email || "",
+    removed: true,
+    removedAt: serverTimestamp(),
+    removedBy: user.uid,
   });
 };
 

@@ -37,6 +37,7 @@ describe("table reach", () => {
     const [bo, ada] = reach.members;
 
     expect(bo).toEqual({
+      uid: "bo",
       displayName: "BO",
       email: "bo@example.com",
       devices: 3,
@@ -57,7 +58,7 @@ describe("table reach", () => {
     expect(reach).toMatchObject({ registered: 1, reachable: 1 });
   });
 
-  it("never returns ids or tokens, only names, emails and counts", () => {
+  it("returns the account id for removal, and nothing about the devices but counts", () => {
     const reach = summarizeReach([member("ada")], [device("ada", 5)]);
 
     expect(Object.keys(reach.members[0]).sort()).toEqual([
@@ -65,7 +66,18 @@ describe("table reach", () => {
       "displayName",
       "email",
       "lastRegistered",
+      "uid",
     ]);
+  });
+
+  it("leaves out players who left the table or were taken off it", () => {
+    const reach = summarizeReach(
+      [member("ada"), { ...member("bo"), removed: true }, { ...member("cy"), removed: false }],
+      [device("ada"), device("bo")],
+    );
+
+    expect(reach).toMatchObject({ registered: 2, reachable: 1 });
+    expect(reach.members.map((entry) => entry.uid)).toEqual(["ada", "cy"]);
   });
 
   it("copes with an empty table and a missing name", () => {

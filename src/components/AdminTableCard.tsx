@@ -6,6 +6,7 @@ import {
   getTableReach,
   getTableSlackWebhook,
   isSlackWebhookUrl,
+  removeFromTable,
   setTableSlackWebhook,
 } from "../api";
 import {
@@ -13,6 +14,7 @@ import {
   Eyebrow,
   Hint,
   Icon,
+  IconButton,
   Input,
   OutlinedCard,
   PrimaryButton,
@@ -74,6 +76,14 @@ const Who = styled.span`
   }
 `;
 
+// The question asked before removing someone. Unlike a name it must never be cut short.
+const Ask = styled(Who)`
+  white-space: normal;
+  & small {
+    white-space: normal;
+  }
+`;
+
 const Reach = styled.span<{ on: boolean }>`
   flex: none;
   display: inline-flex;
@@ -105,6 +115,9 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
   const [reachStatus, setReachStatus] = useState("");
   const [reachBusy, setReachBusy] = useState(false);
 
+  // The player an admin has tapped "remove" on; removing takes a second, explicit tap.
+  const [removing, setRemoving] = useState("");
+
   const loadReach = async () => {
     setReachBusy(true);
     setReachStatus("");
@@ -118,12 +131,28 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
     }
   };
 
+  const removeMember = async (uid: string, displayName: string) => {
+    setReachBusy(true);
+    setReachStatus("");
+    try {
+      setReach(await removeFromTable(user, selectedTable, uid));
+      setReachStatus(`${displayName} is off ${selectedTableName}. They can rejoin with the code.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReachStatus(`Couldn't remove ${displayName}: ${message}`);
+    } finally {
+      setRemoving("");
+      setReachBusy(false);
+    }
+  };
+
   useEffect(() => {
     setWebhook("");
     setWebhookStatus("");
     setSavedWebhook("");
     setReach(null);
     setReachStatus("");
+    setRemoving("");
     if (!selectedTable) {
       return;
     }
@@ -281,29 +310,59 @@ export const AdminTableCard = ({ user, selectedTable, selectedTableName, onCreat
                   : `${reach.reachable} of the ${reach.registered} players registered here get a push when a match starts. "Off" means no device of theirs is signed up: they never turned notifications on, or the sign-up has expired. Whoever starts a match isn't pinged about it.`}
               </Hint>
               <Members>
-                {reach.members.map((member, index) => (
-                  <Member key={`${index}|${member.email}`}>
-                    <Who>
-                      {member.displayName}
-                      {member.email && <small>{member.email}</small>}
-                    </Who>
-                    <Reach
-                      on={member.devices > 0}
-                      title={
-                        member.lastRegistered
-                          ? `Last signed up ${formatDay(member.lastRegistered)}`
-                          : undefined
-                      }
-                    >
-                      <Icon size={18} fill={member.devices > 0 ? 1 : 0} aria-hidden>
-                        {member.devices > 0 ? "notifications_active" : "notifications_off"}
-                      </Icon>
-                      {member.devices === 0
-                        ? "Off"
-                        : `On · ${member.devices} device${member.devices === 1 ? "" : "s"}`}
-                    </Reach>
-                  </Member>
-                ))}
+                {reach.members.map((member) =>
+                  removing === member.uid ? (
+                    <Member key={member.uid}>
+                      <Ask>
+                        Remove {member.displayName} from {selectedTableName}?
+                        <small>Only this table. They can rejoin with its code.</small>
+                      </Ask>
+                      <TextButton
+                        type="button"
+                        disabled={reachBusy}
+                        onClick={() => void removeMember(member.uid, member.displayName)}
+                      >
+                        Remove
+                      </TextButton>
+                      <TextButton type="button" disabled={reachBusy} onClick={() => setRemoving("")}>
+                        Keep
+                      </TextButton>
+                    </Member>
+                  ) : (
+                    <Member key={member.uid}>
+                      <Who>
+                        {member.displayName}
+                        {member.email && <small>{member.email}</small>}
+                      </Who>
+                      <Reach
+                        on={member.devices > 0}
+                        title={
+                          member.lastRegistered
+                            ? `Last signed up ${formatDay(member.lastRegistered)}`
+                            : undefined
+                        }
+                      >
+                        <Icon size={18} fill={member.devices > 0 ? 1 : 0} aria-hidden>
+                          {member.devices > 0 ? "notifications_active" : "notifications_off"}
+                        </Icon>
+                        {member.devices === 0
+                          ? "Off"
+                          : `On · ${member.devices} device${member.devices === 1 ? "" : "s"}`}
+                      </Reach>
+                      <IconButton
+                        type="button"
+                        title={`Remove ${member.displayName} from this table`}
+                        aria-label={`Remove ${member.displayName} from this table`}
+                        disabled={reachBusy}
+                        onClick={() => setRemoving(member.uid)}
+                      >
+                        <Icon size={20} aria-hidden>
+                          person_remove
+                        </Icon>
+                      </IconButton>
+                    </Member>
+                  ),
+                )}
               </Members>
             </>
           )}

@@ -2,12 +2,17 @@
 // whether a device of theirs is signed up for push. Pure, so it can be tested without
 // Firestore; api/members.ts does the reading.
 
-export type MemberRow = { uid: string; displayName: string; email: string };
+// `removed` marks someone who left the table or was taken off it by an admin. Their
+// record is kept, flagged, so the app knows not to sign them straight back up; for every
+// other purpose they are no longer a member.
+export type MemberRow = { uid: string; displayName: string; email: string; removed?: boolean };
 
 // One registered device. `updatedAt` is when it last (re)registered, in ms, if known.
 export type TokenRow = { uid: string; updatedAt: number | null };
 
 export type ReachEntry = {
+  // The player's account id: what an admin's "remove" is addressed to.
+  uid: string;
   displayName: string;
   email: string;
   // Devices signed up for push. Zero means no alert reaches this player: they never
@@ -26,6 +31,8 @@ export type TableReach = {
 
 const MAX_TEXT_LENGTH = 120;
 
+export const isActiveMember = (member: { removed?: unknown }): boolean => member.removed !== true;
+
 export const summarizeReach = (members: MemberRow[], tokens: TokenRow[]): TableReach => {
   const devices = new Map<string, { count: number; last: number | null }>();
   for (const token of tokens) {
@@ -39,12 +46,13 @@ export const summarizeReach = (members: MemberRow[], tokens: TokenRow[]): TableR
 
   // A player registered twice on the same table (it shouldn't happen, the doc id is
   // table + uid) still counts once.
-  const byUid = new Map(members.map((member) => [member.uid, member]));
+  const byUid = new Map(members.filter(isActiveMember).map((member) => [member.uid, member]));
   const entries = [...byUid.values()]
     .map((member): ReachEntry => {
       const registered = devices.get(member.uid);
 
       return {
+        uid: member.uid,
         displayName: (member.displayName || "Player").slice(0, MAX_TEXT_LENGTH),
         email: member.email.slice(0, MAX_TEXT_LENGTH),
         devices: registered?.count ?? 0,

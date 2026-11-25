@@ -252,7 +252,10 @@ const tableMemberUids = async (db: Firestore, tableCode: string, uid: string): P
     .where("tableCode", "==", tableCode)
     .limit(MAX_TABLE_RECIPIENTS)
     .get();
+  // Someone who left the table, or was taken off it, keeps a flagged record there (so
+  // the app doesn't sign them straight back up) but is no longer pinged.
   const uids = snapshot.docs
+    .filter((member) => member.get("removed") !== true)
     .map((member): unknown => member.get("uid"))
     .filter((member): member is string => typeof member === "string" && member !== uid);
 
