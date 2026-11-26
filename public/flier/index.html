@@ -104,6 +104,53 @@
       .print-btn:hover {
         background: #2f5a1a;
       }
+      /* Shown only when edited text has pushed the flyer past one page. */
+      .fit-warning {
+        flex-basis: 100%;
+        margin: 0;
+        text-align: right;
+      }
+      .fit-warning span {
+        display: inline-block;
+        max-width: 280px;
+        padding: 0.45rem 0.9rem;
+        border-radius: 12px;
+        background: #ffdad6;
+        color: #410002;
+        font-size: 0.875rem;
+        font-weight: 600;
+        line-height: 1.3;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      }
+
+      /* ---- Editing (screen only) ----
+         Every text on the flyer can be changed before it is printed. Nothing says so
+         until the pointer is over a text or it is being typed in: then it gets an
+         outline, dashed on hover and solid while editing. Nothing is kept. */
+      .page [contenteditable] {
+        outline: 1.5px dashed transparent;
+        outline-offset: 1.5mm;
+        border-radius: 1mm;
+        cursor: text;
+      }
+      .page [contenteditable]:hover {
+        outline-color: currentColor;
+        outline-color: color-mix(in srgb, currentColor 45%, transparent);
+      }
+      .page [contenteditable]:focus {
+        outline-style: solid;
+        outline-color: currentColor;
+        outline-color: color-mix(in srgb, currentColor 75%, transparent);
+      }
+      /* Longer texts keep the line breaks typed into them. */
+      .page [contenteditable].multiline {
+        white-space: pre-wrap;
+      }
+      /* A text that has been emptied stays findable. */
+      .page [contenteditable]:empty::before {
+        content: "…";
+        opacity: 0.45;
+      }
 
       /* ---- The flyer page ---- */
       .page {
@@ -327,6 +374,12 @@
         .toolbar {
           display: none;
         }
+        .page [contenteditable] {
+          outline: none !important;
+        }
+        .page [contenteditable]:empty::before {
+          content: none;
+        }
         .page {
           box-shadow: none;
           /* Fills the sheet so the footnote stays at the bottom, as on screen. */
@@ -348,6 +401,9 @@
         </svg>
         <span data-i18n="print">Print this flyer</span>
       </button>
+      <p class="fit-warning" id="fit-warning" role="status" hidden>
+        <span data-i18n="tooLong">Too much text: the flyer no longer fits on one page.</span>
+      </p>
     </div>
 
     <div class="page">
@@ -363,7 +419,7 @@
           </svg>
         </div>
         <div class="wordmark">
-          <div class="name">Foosball Matchmaker</div>
+          <div class="name" data-i18n="name">Foosball Matchmaker</div>
           <div class="tag" data-i18n="tag">Scan. Match. Play.</div>
         </div>
       </header>
@@ -456,6 +512,8 @@
             docTitle: "Foosball Matchmaker — Flyer",
             docTitleTable: "Foosball Matchmaker — Table ",
             print: "Print this flyer",
+            tooLong: "Too much text: the flyer no longer fits on one page.",
+            name: "Foosball Matchmaker",
             tag: "Scan. Match. Play.",
             headline: "Got ten minutes?",
             headlineAccent: "Grab a game.",
@@ -488,6 +546,8 @@
             docTitle: "Foosball Matchmaker — Plakat",
             docTitleTable: "Foosball Matchmaker — Bord ",
             print: "Skriv ut plakaten",
+            tooLong: "For mykje tekst: plakaten får ikkje lenger plass på éi side.",
+            name: "Foosball Matchmaker",
             tag: "Skann. Bli med. Spel.",
             headline: "Har du ti minutt?",
             headlineAccent: "Ta ein kamp.",
@@ -564,6 +624,48 @@
           return /^(nb|nn|no)\b/i.test(navigator.language || "") ? "no" : "en";
         };
 
+        // Every text on the flyer can be changed before it is printed: a name for the
+        // table, a different invitation, whatever suits the room. Nothing is kept:
+        // reloading the page, or switching language, brings the original wording back.
+        var page = document.querySelector(".page");
+        var warning = document.getElementById("fit-warning");
+        // The page is exactly one sheet tall until something is typed that doesn't fit.
+        var sheetHeight = page.offsetHeight;
+        var checkFit = function () {
+          warning.hidden = page.offsetHeight <= sheetHeight + 1;
+        };
+        // The texts long enough to want a line break of their own.
+        var MULTILINE = ["lead", "levelsDesc", "breakDesc", "meetDesc", "scanSub", "footnote"];
+
+        page.querySelectorAll("[data-i18n]").forEach(function (el) {
+          // Plain text only, so pasting from elsewhere can't bring its formatting along.
+          el.setAttribute("contenteditable", "plaintext-only");
+          var plain = el.contentEditable === "plaintext-only";
+          if (!plain) {
+            // An older browser: allow editing, and strip what is pasted by hand.
+            el.setAttribute("contenteditable", "true");
+            el.addEventListener("paste", function (event) {
+              event.preventDefault();
+              var pasted = (event.clipboardData || window.clipboardData).getData("text");
+              document.execCommand("insertText", false, pasted);
+            });
+          }
+          el.spellcheck = false;
+
+          var multiline = plain && MULTILINE.indexOf(el.getAttribute("data-i18n")) !== -1;
+          if (multiline) {
+            el.classList.add("multiline");
+          }
+          el.addEventListener("keydown", function (event) {
+            // Enter finishes a one-line text; Escape finishes any.
+            if (event.key === "Escape" || (event.key === "Enter" && !multiline)) {
+              event.preventDefault();
+              el.blur();
+            }
+          });
+          el.addEventListener("input", checkFit);
+        });
+
         var show = function (lang) {
           var text = TEXT[lang];
           document.documentElement.lang = lang === "no" ? "nn" : "en";
@@ -575,6 +677,7 @@
           });
           img.alt = table ? text.qrAltTable(table) : text.qrAlt;
           document.title = table ? text.docTitleTable + table : text.docTitle;
+          checkFit();
         };
 
         document.querySelectorAll("[data-lang]").forEach(function (button) {
