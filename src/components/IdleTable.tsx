@@ -19,14 +19,17 @@ import {
   WIDTH,
   advanceBall,
   paceBall,
-  rodOffset,
+  restingRods,
+  slideRods,
+  steerRods,
   type Team,
 } from "../idleTable";
 import { prefersReducedMotion } from "../motion";
 
 // Something to watch, and poke, while no match is running: a small foosball table seen
 // from above that plays itself. The ball starts in the middle heading a random way,
-// bounces off the walls and the sliding men, and scores when it finds a goal. Each side
+// bounces off the walls and the men, and scores when it finds a goal. The rods slide
+// about as if someone were half playing: see ../idleTable. Each side
 // counts its goals on a rail of ten beads, as on a real table. First to ten wins: the
 // winning men spin, the losing men keel over, and a new game starts. It goes on for ever
 // and no two games are alike. Tapping the table kicks the ball.
@@ -154,6 +157,7 @@ export const IdleTable = () => {
   // sixty renders a second of the whole card would be a lot of work for a toy. Only a
   // goal or a win changes what React draws (the beads, the banner, the men's mood).
   const motion = useRef({ x: WIDTH / 2, y: HEIGHT / 2, vx: 0, vy: 0 });
+  const sliding = useRef(restingRods());
   const game = useRef({ red: 0, blue: 0, phase: "play" as Phase, until: 0 });
   const [score, setScore] = useState({ red: 0, blue: 0 });
   const [winner, setWinner] = useState<Team | null>(null);
@@ -166,7 +170,6 @@ export const IdleTable = () => {
 
     let frame = 0;
     let last = 0;
-    const startedAt = performance.now();
 
     // Puts the ball on the centre spot, heading a random way down the table.
     const serve = () => {
@@ -207,16 +210,15 @@ export const IdleTable = () => {
       const frames = Math.min(3, (now - (last || now)) / FRAME_MS);
       last = now;
 
-      const seconds = (now - startedAt) / 1000;
-      const offsets = RODS.map((rod) => rodOffset(rod, seconds));
-      offsets.forEach((offset, index) => {
-        rods.current[index]?.setAttribute("transform", `translate(0 ${offset.toFixed(2)})`);
-      });
-
       const play = game.current;
       const state = motion.current;
+      const inPlay = play.phase === "play";
 
-      if (play.phase !== "play") {
+      // The rods take an interest in the ball only while there is one in play.
+      steerRods(sliding.current, inPlay ? state : null, frames);
+
+      if (!inPlay) {
+        slideRods(sliding.current, frames);
         // Resting after a goal, or celebrating a win. Then the next ball, and after a
         // win a fresh game.
         if (now >= play.until) {
@@ -230,7 +232,8 @@ export const IdleTable = () => {
           serve();
         }
       } else {
-        const scorer = advanceBall(state, frames, seconds);
+        // Moves the rods along with the ball, so the two meet exactly.
+        const scorer = advanceBall(state, sliding.current, frames);
         if (scorer) {
           scoreGoal(scorer, now);
         } else {
@@ -238,6 +241,9 @@ export const IdleTable = () => {
         }
       }
 
+      sliding.current.forEach((rod, index) => {
+        rods.current[index]?.setAttribute("transform", `translate(0 ${rod.offset.toFixed(2)})`);
+      });
       ball.current?.setAttribute("cx", motion.current.x.toFixed(2));
       ball.current?.setAttribute("cy", motion.current.y.toFixed(2));
       frame = requestAnimationFrame(step);
