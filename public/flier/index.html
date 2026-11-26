@@ -258,9 +258,9 @@
         line-height: 1.05;
         letter-spacing: -0.01em;
       }
-      /* "Skann og spill" is two letters longer than "Scan to play", and one line reads
-         better than two. */
-      html[lang="nb"] .qr-cta .big {
+      /* "Skann og spel" is a little longer than "Scan to play", and one line reads better
+         than two. */
+      html[lang="nn"] .qr-cta .big {
         font-size: 29pt;
       }
       .qr-cta .sub {
@@ -340,7 +340,7 @@
     <div class="toolbar">
       <div class="lang" role="group" aria-label="Language / Språk">
         <button type="button" data-lang="en" lang="en" aria-pressed="true">English</button>
-        <button type="button" data-lang="no" lang="nb" aria-pressed="false">Norsk</button>
+        <button type="button" data-lang="no" lang="nn" aria-pressed="false">Norsk</button>
       </div>
       <button type="button" class="print-btn" onclick="window.print()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -447,9 +447,10 @@
 
     <script>
       (function () {
-        // The flyer in each language. English is also what the page itself holds, so it
-        // reads correctly even if this script never runs. The app's own buttons are in
-        // English, which is why "Jump in" is left as it is in the Norwegian text.
+        // The flyer in each language; the Norwegian is nynorsk. English is also what the
+        // page itself holds, so it reads correctly even if this script never runs. The
+        // app's own buttons are in English, which is why "Jump in" is left as it is in
+        // the Norwegian text.
         var TEXT = {
           en: {
             docTitle: "Foosball Matchmaker — Flyer",
@@ -487,30 +488,30 @@
             docTitle: "Foosball Matchmaker — Plakat",
             docTitleTable: "Foosball Matchmaker — Bord ",
             print: "Skriv ut plakaten",
-            tag: "Skann. Bli med. Spill.",
-            headline: "Har du ti minutter?",
-            headlineAccent: "Ta en kamp.",
+            tag: "Skann. Bli med. Spel.",
+            headline: "Har du ti minutt?",
+            headlineAccent: "Ta ein kamp.",
             lead:
-              "Skann koden, så finner appen medspillere til deg. Aldri spilt før? Perfekt. " +
+              "Skann koden, så finn appen medspelarar til deg. Aldri spelt før? Perfekt. " +
               "Alle er velkomne ved dette bordet.",
             levelsTitle: "Alle er velkomne",
-            levelsDesc: "Lagene blandes, så nybegynnere og veteraner havner på begge sider.",
-            breakTitle: "En skikkelig pause",
-            breakDesc: "En kamp tar omtrent ti minutter. Du er tilbake før kaffen er kald.",
-            meetTitle: "Møt kollegaene",
-            meetDesc: "Spill med dem du bare kjenner fra Slack.",
-            scan: "Skann og spill",
+            levelsDesc: "Laga blir blanda, så nybyrjarar og veteranar hamnar på begge sider.",
+            breakTitle: "Ein skikkeleg pause",
+            breakDesc: "Ein kamp tek om lag ti minutt. Du er tilbake før kaffien er kald.",
+            meetTitle: "Bli betre kjend",
+            meetDesc: "Spel med dei du berre kjenner frå Slack.",
+            scan: "Skann og spel",
             scanSub:
               "Ingen app å installere. Logg inn med Google, trykk «Jump in», så får du " +
-              "et varsel når kampen er i gang.",
+              "eit varsel når kampen er i gang.",
             step1: "1 Skann",
             step2: "2 Logg inn",
             step3: "3 Bli med",
             table: "Bord",
             footnote:
-              "Liker du å telle poeng? Appen holder også orden på rating og en toppliste " +
-              "for dem som vil ha noe å skryte av.",
-            qrAlt: "Skann for å åpne Foosball Matchmaker",
+              "Likar du å telje poeng? Appen held òg orden på rating og ei toppliste " +
+              "for dei som vil ha noko å skryte av.",
+            qrAlt: "Skann for å opne Foosball Matchmaker",
             qrAltTable: function (code) {
               return "Skann for å bli med på bord " + code + " i Foosball Matchmaker";
             },
@@ -565,7 +566,7 @@
 
         var show = function (lang) {
           var text = TEXT[lang];
-          document.documentElement.lang = lang === "no" ? "nb" : "en";
+          document.documentElement.lang = lang === "no" ? "nn" : "en";
           document.querySelectorAll("[data-i18n]").forEach(function (el) {
             el.textContent = text[el.getAttribute("data-i18n")];
           });
