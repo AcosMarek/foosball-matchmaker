@@ -45,12 +45,46 @@
         print-color-adjust: exact;
       }
 
-      /* ---- Floating print button (screen only) ---- */
+      /* ---- Floating language switch and print button (screen only) ---- */
       .toolbar {
         position: fixed;
         top: 16px;
         right: 16px;
         z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+      }
+      /* Each language is named in itself, so it can be found by someone who can't read
+         the one the page happens to be in. */
+      .lang {
+        display: inline-flex;
+        padding: 4px;
+        border-radius: 9999px;
+        background: var(--white);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+      }
+      .lang button {
+        padding: 0.45rem 1rem;
+        border: none;
+        border-radius: 9999px;
+        background: none;
+        color: var(--ink-soft);
+        font-family: inherit;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .lang button[aria-pressed="true"] {
+        background: var(--green-container);
+        color: var(--on-green-container);
+      }
+      .lang button:focus-visible,
+      .print-btn:focus-visible {
+        outline: 3px solid var(--teal);
+        outline-offset: 2px;
       }
       .print-btn {
         display: inline-flex;
@@ -224,6 +258,11 @@
         line-height: 1.05;
         letter-spacing: -0.01em;
       }
+      /* "Skann og spill" is two letters longer than "Scan to play", and one line reads
+         better than two. */
+      html[lang="nb"] .qr-cta .big {
+        font-size: 29pt;
+      }
       .qr-cta .sub {
         margin-top: 3mm;
         font-size: 12pt;
@@ -299,11 +338,15 @@
   </head>
   <body>
     <div class="toolbar">
+      <div class="lang" role="group" aria-label="Language / Språk">
+        <button type="button" data-lang="en" lang="en" aria-pressed="true">English</button>
+        <button type="button" data-lang="no" lang="nb" aria-pressed="false">Norsk</button>
+      </div>
       <button type="button" class="print-btn" onclick="window.print()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Print this flyer
+        <span data-i18n="print">Print this flyer</span>
       </button>
     </div>
 
@@ -321,13 +364,16 @@
         </div>
         <div class="wordmark">
           <div class="name">Foosball Matchmaker</div>
-          <div class="tag">Scan. Match. Play.</div>
+          <div class="tag" data-i18n="tag">Scan. Match. Play.</div>
         </div>
       </header>
 
       <main>
-        <h1>Got ten minutes? <span class="accent">Grab a game.</span></h1>
-        <p class="lead">
+        <h1>
+          <span data-i18n="headline">Got ten minutes?</span>
+          <span class="accent" data-i18n="headlineAccent">Grab a game.</span>
+        </h1>
+        <p class="lead" data-i18n="lead">
           Scan the code and the app rounds up players for you. Never played? Perfect. Everyone's
           welcome at this table.
         </p>
@@ -338,23 +384,29 @@
               <circle cx="12" cy="12" r="9" />
               <path d="M9 10h.01M15 10h.01M8.5 14.5a4.5 4.5 0 0 0 7 0" />
             </svg>
-            <div class="title">All levels welcome</div>
-            <div class="desc">Teams are mixed so beginners and regulars end up on both sides.</div>
+            <div class="title" data-i18n="levelsTitle">All levels welcome</div>
+            <div class="desc" data-i18n="levelsDesc">
+              Teams are mixed so beginners and regulars end up on both sides.
+            </div>
           </li>
           <li class="reason">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M4 10h12v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-4zM16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3" />
             </svg>
-            <div class="title">A proper break</div>
-            <div class="desc">A game takes about ten minutes. You're back before the coffee's cold.</div>
+            <div class="title" data-i18n="breakTitle">A proper break</div>
+            <div class="desc" data-i18n="breakDesc">
+              A game takes about ten minutes. You're back before the coffee's cold.
+            </div>
           </li>
           <li class="reason">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="9" cy="7" r="4" />
               <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85" />
             </svg>
-            <div class="title">Meet your colleagues</div>
-            <div class="desc">Play with the people you only know from Slack.</div>
+            <div class="title" data-i18n="meetTitle">Meet your colleagues</div>
+            <div class="desc" data-i18n="meetDesc">
+              Play with the people you only know from Slack.
+            </div>
           </li>
         </ul>
 
@@ -363,18 +415,19 @@
             <img id="qr" src="" alt="Scan to open Foosball Matchmaker" />
           </div>
           <div class="qr-cta">
-            <div class="big">Scan to play</div>
-            <div class="sub">
+            <div class="big" data-i18n="scan">Scan to play</div>
+            <div class="sub" data-i18n="scanSub">
               No app to install. Sign in with Google, tap Jump in, and you get a ping when the game
               is on.
             </div>
             <ol class="chips">
-              <li>1 Scan</li>
-              <li>2 Sign in</li>
-              <li>3 Jump in</li>
+              <li data-i18n="step1">1 Scan</li>
+              <li data-i18n="step2">2 Sign in</li>
+              <li data-i18n="step3">3 Jump in</li>
             </ol>
             <div class="table-line" id="table-line">
-              Table <span class="code" data-table-code>&mdash;</span>
+              <span data-i18n="table">Table</span>
+              <span class="code" data-table-code>&mdash;</span>
             </div>
           </div>
         </section>
@@ -383,7 +436,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 6h2a2 2 0 0 1 0 4h-2M7 6H5a2 2 0 0 0 0 4h2" />
           </svg>
-          <span>
+          <span data-i18n="footnote">
             Like keeping score? The app also tracks ratings and a leaderboard for those who want
             bragging rights.
           </span>
@@ -394,6 +447,77 @@
 
     <script>
       (function () {
+        // The flyer in each language. English is also what the page itself holds, so it
+        // reads correctly even if this script never runs. The app's own buttons are in
+        // English, which is why "Jump in" is left as it is in the Norwegian text.
+        var TEXT = {
+          en: {
+            docTitle: "Foosball Matchmaker — Flyer",
+            docTitleTable: "Foosball Matchmaker — Table ",
+            print: "Print this flyer",
+            tag: "Scan. Match. Play.",
+            headline: "Got ten minutes?",
+            headlineAccent: "Grab a game.",
+            lead:
+              "Scan the code and the app rounds up players for you. Never played? Perfect. " +
+              "Everyone's welcome at this table.",
+            levelsTitle: "All levels welcome",
+            levelsDesc: "Teams are mixed so beginners and regulars end up on both sides.",
+            breakTitle: "A proper break",
+            breakDesc: "A game takes about ten minutes. You're back before the coffee's cold.",
+            meetTitle: "Meet your colleagues",
+            meetDesc: "Play with the people you only know from Slack.",
+            scan: "Scan to play",
+            scanSub:
+              "No app to install. Sign in with Google, tap Jump in, and you get a ping when " +
+              "the game is on.",
+            step1: "1 Scan",
+            step2: "2 Sign in",
+            step3: "3 Jump in",
+            table: "Table",
+            footnote:
+              "Like keeping score? The app also tracks ratings and a leaderboard for those " +
+              "who want bragging rights.",
+            qrAlt: "Scan to open Foosball Matchmaker",
+            qrAltTable: function (code) {
+              return "Scan to join table " + code + " on Foosball Matchmaker";
+            },
+          },
+          no: {
+            docTitle: "Foosball Matchmaker — Plakat",
+            docTitleTable: "Foosball Matchmaker — Bord ",
+            print: "Skriv ut plakaten",
+            tag: "Skann. Bli med. Spill.",
+            headline: "Har du ti minutter?",
+            headlineAccent: "Ta en kamp.",
+            lead:
+              "Skann koden, så finner appen medspillere til deg. Aldri spilt før? Perfekt. " +
+              "Alle er velkomne ved dette bordet.",
+            levelsTitle: "Alle er velkomne",
+            levelsDesc: "Lagene blandes, så nybegynnere og veteraner havner på begge sider.",
+            breakTitle: "En skikkelig pause",
+            breakDesc: "En kamp tar omtrent ti minutter. Du er tilbake før kaffen er kald.",
+            meetTitle: "Møt kollegaene",
+            meetDesc: "Spill med dem du bare kjenner fra Slack.",
+            scan: "Skann og spill",
+            scanSub:
+              "Ingen app å installere. Logg inn med Google, trykk «Jump in», så får du " +
+              "et varsel når kampen er i gang.",
+            step1: "1 Skann",
+            step2: "2 Logg inn",
+            step3: "3 Bli med",
+            table: "Bord",
+            footnote:
+              "Liker du å telle poeng? Appen holder også orden på rating og en toppliste " +
+              "for dem som vil ha noe å skryte av.",
+            qrAlt: "Skann for å åpne Foosball Matchmaker",
+            qrAltTable: function (code) {
+              return "Skann for å bli med på bord " + code + " i Foosball Matchmaker";
+            },
+          },
+        };
+        var STORAGE_KEY = "foosball:flierLang";
+
         var params = new URLSearchParams(window.location.search);
         var table = (params.get("table") || "").trim().toUpperCase();
         var origin = window.location.origin;
@@ -406,21 +530,74 @@
 
         var img = document.getElementById("qr");
         img.src = qrUrl;
-        img.alt = table
-          ? "Scan to join table " + table + " on Foosball Matchmaker"
-          : "Scan to open Foosball Matchmaker";
 
         document.querySelectorAll("[data-table-code]").forEach(function (el) {
-          el.textContent = table || "any table";
+          el.textContent = table || "—";
         });
 
         if (!table) {
           document.getElementById("table-line").style.display = "none";
         }
 
-        if (table) {
-          document.title = "Foosball Matchmaker — Table " + table;
-        }
+        // Which language to open in: the one named in the address (so a link to the
+        // Norwegian flyer stays Norwegian), else the one chosen here last time, else
+        // Norwegian for a browser set to Norwegian, else English.
+        var pickLanguage = function () {
+          var asked = (params.get("lang") || "").toLowerCase();
+          if (asked === "no" || asked === "nb" || asked === "nn") {
+            return "no";
+          }
+          if (asked === "en") {
+            return "en";
+          }
+
+          try {
+            var saved = localStorage.getItem(STORAGE_KEY);
+            if (saved === "no" || saved === "en") {
+              return saved;
+            }
+          } catch (error) {
+            // Storage can be unavailable (private browsing); the browser's language decides.
+          }
+
+          return /^(nb|nn|no)\b/i.test(navigator.language || "") ? "no" : "en";
+        };
+
+        var show = function (lang) {
+          var text = TEXT[lang];
+          document.documentElement.lang = lang === "no" ? "nb" : "en";
+          document.querySelectorAll("[data-i18n]").forEach(function (el) {
+            el.textContent = text[el.getAttribute("data-i18n")];
+          });
+          document.querySelectorAll("[data-lang]").forEach(function (button) {
+            button.setAttribute("aria-pressed", String(button.getAttribute("data-lang") === lang));
+          });
+          img.alt = table ? text.qrAltTable(table) : text.qrAlt;
+          document.title = table ? text.docTitleTable + table : text.docTitle;
+        };
+
+        document.querySelectorAll("[data-lang]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            var lang = button.getAttribute("data-lang");
+            show(lang);
+
+            try {
+              localStorage.setItem(STORAGE_KEY, lang);
+            } catch (error) {
+              // Not remembered, then; the address below still carries it.
+            }
+            // Kept in the address so the page can be bookmarked or shared in this language.
+            try {
+              var url = new URL(window.location.href);
+              url.searchParams.set("lang", lang);
+              window.history.replaceState(null, "", url);
+            } catch (error) {
+              // A page opened straight from a file may not allow it.
+            }
+          });
+        });
+
+        show(pickLanguage());
       })();
     </script>
   </body>
