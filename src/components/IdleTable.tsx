@@ -1,6 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { keyframes } from "@emotion/react";
 import styled from "@emotion/styled";
+import {
+  BALL_RADIUS,
+  FIELD_CORNER,
+  GOAL_BOTTOM,
+  GOAL_TOP,
+  HEIGHT,
+  IDLE_SPEED,
+  KICK_SPEED,
+  MAN_CORNER,
+  MAN_HALF_HEIGHT,
+  MAN_HALF_WIDTH,
+  RODS,
+  WALL,
+  WALL_FACE,
+  WALL_THICKNESS,
+  WIDTH,
+  advanceBall,
+  paceBall,
+  rodOffset,
+  type Team,
+} from "../idleTable";
 import { prefersReducedMotion } from "../motion";
 
 // Something to watch, and poke, while no match is running: a small foosball table seen
@@ -12,41 +33,15 @@ import { prefersReducedMotion } from "../motion";
 //
 // It has a shape of its own, so on a wide screen it sits centred at a sensible size
 // instead of stretching. Pure decoration: with reduced motion it is a still picture.
+//
+// This file is the drawing and the run of play. Where everything is and how the ball
+// comes off it is in ../idleTable, which the drawing takes its measurements from.
 
-type Team = "red" | "blue";
 type Phase = "play" | "goal" | "won";
 
-// The drawing's own units; the SVG scales them to whatever width it is given. The bead
-// rails sit above the field, in the strip the view box adds on top.
-const WIDTH = 320;
-const HEIGHT = 150;
+// The bead rails sit above the field, in the strip the view box adds on top.
 const RAIL_STRIP = 22;
 const RAIL_Y = -11;
-const WALL = 6;
-const BALL_RADIUS = 5;
-const LEFT = WALL + BALL_RADIUS + 3;
-const RIGHT = WIDTH - WALL - BALL_RADIUS - 3;
-const TOP = WALL + BALL_RADIUS + 3;
-const BOTTOM = HEIGHT - WALL - BALL_RADIUS - 3;
-// The goal mouths, in the middle of each end wall.
-const GOAL_TOP = 55;
-const GOAL_BOTTOM = 95;
-const MAN_HALF_HEIGHT = 9;
-// How far above or below a man's centre the ball can be and still be struck by him.
-const MAN_REACH = MAN_HALF_HEIGHT + 2;
-// How far each rod slides either way, and how fast.
-const SLIDE = 16;
-const SLIDE_SPEED = 1.3;
-
-// Each rod: where it crosses the table, whose it is, where its men sit, and where in its
-// back-and-forth it starts, so the four don't move as one. Red defends the left goal and
-// Blue the right, so a ball in the left goal is a goal for Blue.
-const RODS: { x: number; team: Team; men: number[]; phase: number }[] = [
-  { x: 60, team: "red", men: [45, 105], phase: 0 },
-  { x: 125, team: "blue", men: [35, 75, 115], phase: 1.7 },
-  { x: 195, team: "red", men: [35, 75, 115], phase: 3.1 },
-  { x: 260, team: "blue", men: [45, 105], phase: 4.6 },
-];
 
 const GOALS_TO_WIN = 10;
 const BEADS = Array.from({ length: GOALS_TO_WIN }, (_, index) => index);
@@ -55,14 +50,6 @@ const BEAD_GAP = 9;
 const beadX = (team: Team, index: number): number =>
   team === "red" ? 14 + index * BEAD_GAP : WIDTH - 14 - index * BEAD_GAP;
 
-// Speeds are in drawing units per frame at 60 frames a second.
-const IDLE_SPEED = 1.9;
-const KICK_SPEED = 6;
-// Share of its speed a kicked ball keeps each frame, until it is back to idling.
-const FRICTION = 0.985;
-// Slowest the ball may travel along the table, so it never ends up bouncing straight up
-// and down between two rods.
-const MIN_ALONG = 0.8;
 // A ball leaves the centre spot within this angle of straight down the table, either way.
 const SERVE_SPREAD = Math.PI / 3;
 const FRAME_MS = 1000 / 60;
@@ -121,7 +108,6 @@ const Field = styled.rect`
     var(--md-sys-color-surface-container-lowest)
   );
   stroke: var(--md-sys-color-primary);
-  stroke-width: 2;
 `;
 
 const Marking = styled.g`
@@ -202,8 +188,7 @@ export const IdleTable = () => {
       const play = game.current;
       play[team] += 1;
       setScore({ red: play.red, blue: play.blue });
-      // The ball comes to rest inside the goal it went into.
-      motion.current.x = team === "blue" ? WALL - 1 : WIDTH - WALL + 1;
+      // The ball comes to rest where it crossed the line, inside the goal.
       motion.current.vx = 0;
       motion.current.vy = 0;
 
@@ -223,9 +208,9 @@ export const IdleTable = () => {
       last = now;
 
       const seconds = (now - startedAt) / 1000;
-      const offsets = RODS.map((rod) => Math.sin(seconds * SLIDE_SPEED + rod.phase) * SLIDE);
+      const offsets = RODS.map((rod) => rodOffset(rod, seconds));
       offsets.forEach((offset, index) => {
-        rods.current[index]?.setAttribute("transform", `translate(0 ${offset.toFixed(1)})`);
+        rods.current[index]?.setAttribute("transform", `translate(0 ${offset.toFixed(2)})`);
       });
 
       const play = game.current;
@@ -245,54 +230,16 @@ export const IdleTable = () => {
           serve();
         }
       } else {
-        const before = state.x;
-        state.x += state.vx * frames;
-        state.y += state.vy * frames;
-
-        if (state.y < TOP || state.y > BOTTOM) {
-          state.y = Math.min(BOTTOM, Math.max(TOP, state.y));
-          state.vy = -state.vy;
-        }
-
-        // An end wall: a goal if the ball arrives at the mouth, a bounce otherwise.
-        const atMouth = state.y > GOAL_TOP + 2 && state.y < GOAL_BOTTOM - 2;
-        if (state.x < LEFT || state.x > RIGHT) {
-          if (atMouth) {
-            scoreGoal(state.x < LEFT ? "blue" : "red", now);
-          } else {
-            state.x = Math.min(RIGHT, Math.max(LEFT, state.x));
-            state.vx = -state.vx;
-          }
-        }
-
-        if (play.phase === "play") {
-          // A man in the ball's path sends it back the way it came, with a little spin.
-          RODS.forEach((rod, index) => {
-            const crossed = (before - rod.x) * (state.x - rod.x) <= 0 && before !== state.x;
-            const struck = rod.men.some(
-              (man) => Math.abs(state.y - (man + offsets[index])) < MAN_REACH,
-            );
-            if (crossed && struck) {
-              state.x = before;
-              state.vx = -state.vx;
-              state.vy += (Math.random() - 0.5) * 1.2;
-            }
-          });
-
-          // A kicked ball slows to its idle pace; an idle one is held there.
-          const speed = Math.hypot(state.vx, state.vy) || IDLE_SPEED;
-          const target =
-            speed > IDLE_SPEED ? Math.max(IDLE_SPEED, speed * FRICTION ** frames) : IDLE_SPEED;
-          state.vx *= target / speed;
-          state.vy *= target / speed;
-          if (Math.abs(state.vx) < MIN_ALONG) {
-            state.vx = state.vx < 0 ? -MIN_ALONG : MIN_ALONG;
-          }
+        const scorer = advanceBall(state, frames, seconds);
+        if (scorer) {
+          scoreGoal(scorer, now);
+        } else {
+          paceBall(state, frames);
         }
       }
 
-      ball.current?.setAttribute("cx", motion.current.x.toFixed(1));
-      ball.current?.setAttribute("cy", motion.current.y.toFixed(1));
+      ball.current?.setAttribute("cx", motion.current.x.toFixed(2));
+      ball.current?.setAttribute("cy", motion.current.y.toFixed(2));
       frame = requestAnimationFrame(step);
     };
 
@@ -366,28 +313,34 @@ export const IdleTable = () => {
             ))}
           </g>
         ))}
-        <Field x={WALL} y={WALL} width={WIDTH - 2 * WALL} height={HEIGHT - 2 * WALL} rx="10" />
+        <Field
+          x={WALL}
+          y={WALL}
+          width={WIDTH - 2 * WALL}
+          height={HEIGHT - 2 * WALL}
+          rx={FIELD_CORNER}
+          strokeWidth={WALL_THICKNESS}
+        />
         <Marking>
           <line x1={WIDTH / 2} y1={WALL} x2={WIDTH / 2} y2={HEIGHT - WALL} />
           <circle cx={WIDTH / 2} cy={HEIGHT / 2} r="18" />
         </Marking>
-        {/* The two goals. */}
-        <rect
-          x="2"
-          y={GOAL_TOP}
-          width="6"
-          height={GOAL_BOTTOM - GOAL_TOP}
-          rx="2"
-          fill="var(--md-sys-color-primary)"
-        />
-        <rect
-          x={WIDTH - 8}
-          y={GOAL_TOP}
-          width="6"
-          height={GOAL_BOTTOM - GOAL_TOP}
-          rx="2"
-          fill="var(--md-sys-color-primary)"
-        />
+        {/* The two goals: an opening in each end wall, between the posts the ball can
+            clip, with a shallow box behind it for the ball to come to rest in. */}
+        {[WALL_FACE, WIDTH - WALL_FACE].map((face) => {
+          const back = face < WIDTH / 2 ? 1.5 : WIDTH - 1.5;
+
+          return (
+            <path
+              key={face}
+              d={`M ${face} ${GOAL_TOP} H ${back} V ${GOAL_BOTTOM} H ${face}`}
+              fill="var(--md-sys-color-surface-container-lowest)"
+              stroke="var(--md-sys-color-primary)"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          );
+        })}
         {/* The rods themselves stay put: a sliding straight line looks no different, and
             this way they never reach up into the bead rails. Only the men move. */}
         {RODS.map((rod) => (
@@ -411,11 +364,11 @@ export const IdleTable = () => {
             {rod.men.map((man) => (
               <Man
                 key={man}
-                x={rod.x - 4}
+                x={rod.x - MAN_HALF_WIDTH}
                 y={man - MAN_HALF_HEIGHT}
-                width="8"
+                width={MAN_HALF_WIDTH * 2}
                 height={MAN_HALF_HEIGHT * 2}
-                rx="3"
+                rx={MAN_CORNER}
                 fill={teamColor(rod.team)}
                 data-mood={winner ? (winner === rod.team ? "won" : "lost") : undefined}
               />
