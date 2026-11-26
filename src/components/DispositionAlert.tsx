@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import styled from "@emotion/styled";
 import { ratingOf, teamAverage, type RatingStats } from "../ratings";
-import { Icon, Rating } from "../ui";
+import { Icon, PlayerName, Rating } from "../ui";
 import type { MatchDisposition, TeamPlayer } from "../matchmaking";
 
 const Ready = styled.div`
@@ -99,10 +99,8 @@ const Average = styled.span`
   color: var(--md-sys-color-on-surface-variant);
 `;
 
-const describeTeamPlayer = (teamPlayer: TeamPlayer): string =>
-  teamPlayer.position === "solo"
-    ? teamPlayer.player.displayName
-    : `${teamPlayer.player.displayName} (${teamPlayer.position})`;
+const positionOf = (teamPlayer: TeamPlayer): string =>
+  teamPlayer.position === "solo" ? "" : ` (${teamPlayer.position})`;
 
 type Props = {
   disposition: MatchDisposition;
@@ -111,15 +109,38 @@ type Props = {
   stats: RatingStats | null;
   // Made-up names for Red and Blue, for a 2v2; null for a 1v1.
   teamNames: [string, string] | null;
+  // Who holds this table's championship belt, if anyone, and how often they have
+  // defended it.
+  championUid: string | null;
+  beltDefences: number;
 };
 
-export const DispositionAlert = ({ disposition, waiting, stats, teamNames }: Props) => (
+// A 1v1 with the champion in it is a title match: the belt goes to whoever wins.
+const isTitleMatch = (disposition: MatchDisposition, championUid: string | null): boolean =>
+  disposition.size === 2 &&
+  disposition.teams.some((team) => team.players.some((entry) => entry.player.uid === championUid));
+
+const headline = (disposition: MatchDisposition, titleMatch: boolean): string =>
+  titleMatch
+    ? "Title match — the belt is on the line!"
+    : disposition.size === 2
+      ? "Heads up — 1v1 is on!"
+      : "Teams are set — 2v2!";
+
+export const DispositionAlert = ({
+  disposition,
+  waiting,
+  stats,
+  teamNames,
+  championUid,
+  beltDefences,
+}: Props) => (
   <Ready role="status">
     <ReadyHead>
       <Icon fill={1} aria-hidden>
-        sports_score
+        {isTitleMatch(disposition, championUid) ? "workspace_premium" : "sports_score"}
       </Icon>
-      {disposition.size === 2 ? "Heads up — 1v1 is on!" : "Teams are set — 2v2!"}
+      {headline(disposition, isTitleMatch(disposition, championUid))}
     </ReadyHead>
     <Teams>
       {disposition.teams.map((team, teamIndex) => (
@@ -132,7 +153,12 @@ export const DispositionAlert = ({ disposition, waiting, stats, teamNames }: Pro
               {team.players.map((entry, index) => (
                 <span key={entry.player.uid}>
                   {index > 0 && ", "}
-                  {describeTeamPlayer(entry)}
+                  <PlayerName
+                    name={entry.player.displayName}
+                    champion={entry.player.uid === championUid}
+                    defences={beltDefences}
+                  />
+                  {positionOf(entry)}
                   {stats && (
                     <>
                       {" "}

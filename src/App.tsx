@@ -31,6 +31,7 @@ import { LeaderboardCard } from "./components/LeaderboardCard";
 import { StatsDialog } from "./components/StatsDialog";
 import { matchesFor, tableStandings } from "./ratings";
 import { matchCommentary } from "./commentary";
+import { beltOf, describeBeltEvent } from "./belt";
 import { RecordResultCard } from "./components/RecordResultCard";
 import { ResultCelebration } from "./components/ResultCelebration";
 import { QrCard } from "./components/QrCard";
@@ -101,6 +102,21 @@ export default function App() {
   const [statsOpen, setStatsOpen] = useState(false);
   // A line of commentary for every scored match, by session id.
   const commentary = useMemo(() => (stats ? matchCommentary(stats) : {}), [stats]);
+  // This table's championship belt: who holds it, and what each 1v1 did to it.
+  const belt = useMemo(
+    () => (stats && selectedTable ? beltOf(stats, selectedTable) : null),
+    [stats, selectedTable],
+  );
+  const championUid = belt?.reign?.holder.uid ?? null;
+  // The commentary for this table's matches, with what happened to the belt added.
+  const notes = useMemo(() => {
+    const merged = { ...commentary };
+    for (const [sessionId, event] of Object.entries(belt?.events ?? {})) {
+      merged[sessionId] = [merged[sessionId], describeBeltEvent(event)].filter(Boolean).join(" ");
+    }
+
+    return merged;
+  }, [commentary, belt]);
 
   // Puts a table out of sight on this device: off the list, deselected, and with a note
   // saying so. Used both when the player leaves and when the app finds, on opening the
@@ -303,6 +319,8 @@ export default function App() {
             activeSession={activeSession}
             sessionPlayers={sessionPlayers}
             stats={stats}
+            championUid={championUid}
+            beltDefences={belt?.reign?.defences ?? 0}
             autoJoinStamp={autoJoin}
             onAutoJoinDone={() => setAutoJoin(null)}
           />
@@ -312,7 +330,7 @@ export default function App() {
               key={justScored.session.id}
               session={justScored.session}
               match={stats?.matches[justScored.session.id] ?? null}
-              note={commentary[justScored.session.id]}
+              note={notes[justScored.session.id]}
               currentUid={user.uid}
               onClose={justScored.clear}
             />
@@ -333,6 +351,7 @@ export default function App() {
               standings={standings}
               tableName={selectedTableName}
               currentUid={user.uid}
+              belt={belt}
             />
           )}
 
@@ -341,8 +360,9 @@ export default function App() {
               tableCode={selectedTable}
               sessions={recentSessions}
               stats={stats}
-              notes={commentary}
+              notes={notes}
               currentUid={user.uid}
+              championUid={championUid}
             />
           )}
 

@@ -1,6 +1,13 @@
 // `rating` is the Elo rating the player took into the match, and `delta` what a logged
 // result did to it. Both are optional: the app leaves them out while ratings are loading.
-export type RosterPlayer = { name: string; position: string; rating?: number; delta?: number };
+// `champion` marks the holder of the table's championship belt.
+export type RosterPlayer = {
+  name: string;
+  position: string;
+  rating?: number;
+  delta?: number;
+  champion?: boolean;
+};
 // `name` is the side's made-up name for the match ("Spin City"), sent for a 2v2.
 export type Roster = { color: string; name?: string; players: RosterPlayer[] };
 
@@ -11,6 +18,15 @@ const POSITION_ICON: Record<string, string> = {
   back: ":shield:",
   solo: ":dart:",
 };
+
+// Slack wraps a line at any ordinary space, and the lineup sits in two narrow columns, so
+// a long name used to push half of its rating onto the next line ("1050 →" / "1062 (+12)").
+// Everything that belongs together is therefore joined with no-break spaces: an icon and
+// what it labels, and a name's last word and the figure after it. A line that is too long
+// for its column now breaks inside the name, between its words, and nowhere else.
+// Written as escapes so the source never depends on an invisible character surviving.
+const GLUE = "\u00a0\u00a0";
+const DOT = `${GLUE}·${GLUE}`;
 
 // Fixed labels, picked server-side: the button text must never be caller-supplied. Joins
 // are deliberately absent — a burst of them would repeat the same button down the channel.
@@ -59,6 +75,7 @@ export const parseRoster = (value: unknown): Roster[] => {
         position?: unknown;
         rating?: unknown;
         delta?: unknown;
+        champion?: unknown;
       };
       if (
         typeof player.name !== "string" ||
@@ -76,6 +93,8 @@ export const parseRoster = (value: unknown): Roster[] => {
         ...(rating === undefined ? {} : { rating }),
         // A change means nothing without the rating it applies to.
         ...(rating === undefined || delta === undefined ? {} : { delta }),
+        // Only the literal flag counts, so nothing else a caller sends can set it.
+        ...(player.champion === true ? { champion: true } : {}),
       });
     }
 
@@ -95,15 +114,27 @@ export const parseRoster = (value: unknown): Roster[] => {
 const formatDelta = (delta: number): string =>
   delta > 0 ? `+${delta}` : delta < 0 ? `−${-delta}` : "±0";
 
-// "1042" going into a match, or "1042 → 1058 (+16)" once its result is in.
-const ratingText = ({ rating, delta }: RosterPlayer): string => {
+// What a result did to a side's ratings, when it did the same to all of its players. It
+// always does: teammates move together. Said once, beside the side's colour, it keeps
+// every player's line short enough for a narrow column.
+const sharedDelta = (team: Roster): number | undefined => {
+  const [first, ...rest] = team.players.map((player) => player.delta);
+
+  return rest.every((delta) => delta === first) ? first : undefined;
+};
+
+// "1042" going into a match. Once its result is in, the rating the player now has:
+// "1058", with the change beside the side's colour, or "1058 (+16)" in the odd case that
+// teammates moved differently.
+const ratingText = ({ rating, delta }: RosterPlayer, shared: boolean): string => {
   if (rating === undefined) {
     return "";
   }
+  if (delta === undefined) {
+    return `${DOT}${rating}`;
+  }
 
-  return delta === undefined
-    ? `  ·  ${rating}`
-    : `  ·  ${rating} → ${rating + delta} (${formatDelta(delta)})`;
+  return `${DOT}${rating + delta}${shared ? "" : `\u00a0(${formatDelta(delta)})`}`;
 };
 
 // A pair's strength is the average of its two ratings, the same figure the app uses to
@@ -117,23 +148,31 @@ const teamAverageText = (team: Roster): string => {
 
   const total = (ratings as number[]).reduce((sum, rating) => sum + rating, 0);
 
-  return `  ·  avg ${Math.round(total / ratings.length)}`;
+  return `${DOT}avg\u00a0${Math.round(total / ratings.length)}`;
 };
 
-const rosterField = (team: Roster) => ({
+const rosterField = (team: Roster) => {
+  const shared = sharedDelta(team);
+
+  return {
   type: "mrkdwn",
   text: [
-    `${TEAM_ICON[team.color]}  *${escapeSlack(team.color)}*${teamAverageText(team)}`,
+    `${TEAM_ICON[team.color]}${GLUE}*${escapeSlack(team.color)}*${teamAverageText(team)}${
+      shared === undefined ? "" : `${DOT}rating\u00a0${formatDelta(shared)}`
+    }`,
     // Underscores would end the italics early, so a name containing one is shown plain.
     ...(team.name
       ? [team.name.includes("_") ? escapeSlack(team.name) : `_${escapeSlack(team.name)}_`]
       : []),
     ...team.players.map(
       (player) =>
-        `${POSITION_ICON[player.position]}  ${escapeSlack(player.name)}${ratingText(player)}`,
+        `${POSITION_ICON[player.position]}${GLUE}${escapeSlack(player.name)}${
+          player.champion ? `${GLUE}:trophy:` : ""
+        }${ratingText(player, shared !== undefined)}`,
     ),
   ].join("\n"),
-});
+  };
+};
 
 // A `url` button needs no action_id and no interactivity request URL — Slack just opens
 // the link. The plain `text` stays as the notification fallback.
@@ -193,11 +232,22 @@ export const buildSlackPayload = (
     const positioned = roster.some((team) =>
       team.players.some((player) => player.position !== "solo"),
     );
+    // The belt is only ever at stake in a 1v1 with its holder in it.
+    const title =
+      size === "1v1" && roster.some((team) => team.players.some((player) => player.champion));
 
     return {
       text: body,
       blocks: [
-        { type: "section", text: { type: "mrkdwn", text: `:soccer:  *Game on!*  ·  ${size}` } },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `:soccer:  *Game on!*  ·  ${size}${
+              title ? "  ·  :trophy: *Title match*, the belt is on the line" : ""
+            }`,
+          },
+        },
         { type: "section", fields: roster.map(rosterField) },
         ...(positioned
           ? [

@@ -2,7 +2,7 @@ import { useState } from "react";
 import styled from "@emotion/styled";
 import { matchSizeLabel, teamCssColor } from "../matchmaking";
 import { formatDelta, type MatchRating } from "../ratings";
-import { Delta, Rating, TextButton } from "../ui";
+import { Delta, PlayerName, Rating, TextButton } from "../ui";
 
 export const MatchList = styled.ol`
   list-style: none;
@@ -103,6 +103,8 @@ type Props = {
   pageSize?: number;
   // A line of commentary per match, by session id (see src/commentary.ts).
   notes?: Record<string, string>;
+  // Who holds the table's championship belt now, when the list is one table's.
+  championUid?: string | null;
 };
 
 // Rated results, a page at a time: each side with the rating its players took into the
@@ -113,6 +115,7 @@ export const RatedMatchList = ({
   tableLabel,
   pageSize = DEFAULT_PAGE,
   notes,
+  championUid = null,
 }: Props) => {
   const [shown, setShown] = useState(pageSize);
   const hidden = matches.length - shown;
@@ -137,11 +140,16 @@ export const RatedMatchList = ({
                       {team.players.map((player, index) => (
                         <span key={player.uid}>
                           {index > 0 && ", "}
-                          {player.uid === currentUid ? (
-                            <strong>{player.displayName}</strong>
-                          ) : (
-                            player.displayName
-                          )}{" "}
+                          <PlayerName
+                            name={
+                              player.uid === currentUid ? (
+                                <strong>{player.displayName}</strong>
+                              ) : (
+                                player.displayName
+                              )
+                            }
+                            champion={player.uid === championUid}
+                          />{" "}
                           <Rating>{match.before[player.uid]}</Rating>
                         </span>
                       ))}

@@ -41,6 +41,7 @@ import {
   type RatingStats,
 } from "./ratings";
 import { commentaryForNew } from "./commentary";
+import { beltEventForNew, championOf, describeBeltEvent } from "./belt";
 import { teamNamesFor } from "./teamNames";
 import { balanceTeams, dispositionFromTeams } from "./teams";
 import { toDate } from "./utils";
@@ -50,9 +51,15 @@ import type { WeeklySession } from "./weekly";
 
 const displayNameOf = (user: User): string => user.displayName || user.email || "Player";
 
-// "Ada (1042)" for announcements, or just the name while ratings haven't loaded.
-const nameWithRating = (user: User, fallback: string, stats: RatingStats | null): string => {
-  const name = user.displayName || fallback;
+// "Ada (1042)" for announcements, or just the name while ratings haven't loaded. The
+// holder of the table's belt is announced as such: "Champion Ada (1042)".
+const nameWithRating = (
+  user: User,
+  fallback: string,
+  stats: RatingStats | null,
+  champion = false,
+): string => {
+  const name = `${champion ? "Champion " : ""}${user.displayName || fallback}`;
 
   return stats ? `${name} (${ratingOf(stats, user.uid)})` : name;
 };
@@ -67,7 +74,14 @@ type NotifyTeam = {
   color: string;
   // The side's made-up name for the match, in a 2v2.
   name?: string;
-  players: { name: string; position: TeamPosition; rating?: number; delta?: number }[];
+  // `champion` marks the holder of the table's belt.
+  players: {
+    name: string;
+    position: TeamPosition;
+    rating?: number;
+    delta?: number;
+    champion?: boolean;
+  }[];
 };
 
 type NotifyPayload = {
@@ -86,6 +100,7 @@ const notifyTeams = (
   stats: RatingStats | null,
   redDelta?: number,
   names?: [string, string],
+  championUid: string | null = null,
 ): NotifyTeam[] =>
   (disposition?.teams ?? []).map((team, index) => ({
     color: team.color,
@@ -95,6 +110,7 @@ const notifyTeams = (
       position: entry.position,
       ...(stats ? { rating: ratingOf(stats, entry.player.uid) } : {}),
       ...(redDelta === undefined ? {} : { delta: index === 0 ? redDelta : -redDelta }),
+      ...(championUid && entry.player.uid === championUid ? { champion: true } : {}),
     })),
   }));
 
@@ -297,14 +313,18 @@ export const notifyTableMembers = (
   tableCode: string,
   targetPlayers: MatchSize,
   stats: RatingStats | null = null,
-): Promise<number> =>
-  sendNotification(user, {
-    message: `${nameWithRating(user, "A player", stats)} started a ${matchSizeLabel(
+): Promise<number> => {
+  // When the champion starts a 1v1, whoever joins is playing for the belt.
+  const champion = championOf(stats, tableCode) === user.uid;
+
+  return sendNotification(user, {
+    message: `${nameWithRating(user, "A player", stats, champion)} started a ${matchSizeLabel(
       targetPlayers,
-    )} on ${tableCode}.`,
+    )} on ${tableCode}.${champion && targetPlayers === 2 ? " The belt is on the line." : ""}`,
     tableCode,
     event: "start",
   });
+};
 
 // Roster for a session, in join order. Forced to the server: a player arriving straight
 // from a Slack link has a partly-synced cache holding their own write but not everyone
@@ -384,10 +404,16 @@ export const notifyJoin = async (
     players = mergeRoster(await readSessionPlayers(sessionId), players);
   }
 
+  const championUid = championOf(stats, tableCode);
   const outcome = joinOutcome(position, players.length, targetPlayers);
   if (!outcome.filled) {
     await sendNotification(user, {
-      message: `${nameWithRating(user, displayNameOf(user), stats)} joined the game — ${outcome.remaining} spot${
+      message: `${nameWithRating(
+        user,
+        displayNameOf(user),
+        stats,
+        championUid === user.uid,
+      )} joined the game — ${outcome.remaining} spot${
         outcome.remaining === 1 ? "" : "s"
       } left.`,
       tableCode,
@@ -422,16 +448,24 @@ export const notifyJoin = async (
   const lineup = disposition
     ? describeDisposition(disposition)
     : `${players.length}/${targetPlayers} in.`;
-  const recipients = players.slice(0, targetPlayers).filter((player) => player.uid !== user.uid);
+  const playing = players.slice(0, targetPlayers);
+  const recipients = playing.filter((player) => player.uid !== user.uid);
+  // The champion is announced whenever they play; in a 1v1 the belt is at stake as well.
+  const champion = playing.find((player) => player.uid === championUid);
+  const title = !champion
+    ? ""
+    : targetPlayers === 2
+      ? ` Title match: ${champion.displayName} puts the belt on the line.`
+      : ` ${champion.displayName} is the reigning champion.`;
 
   // Delivered via Web Push so recipients are alerted even with the tab closed. `message`
   // stays the terse push body; Slack renders the roster from `teams` instead.
   return sendNotification(user, {
-    message: `Game on! ${lineup}`,
+    message: `Game on! ${lineup}${title}`,
     recipients: recipients.map((player) => player.uid),
     tableCode,
     event: "ready",
-    teams: notifyTeams(disposition, stats, undefined, teamNamesFor(sessionId)),
+    teams: notifyTeams(disposition, stats, undefined, teamNamesFor(sessionId), championUid),
   });
 };
 
@@ -590,18 +624,21 @@ export const recordMatchResult = async (
       ? ratingDelta(red, blue, score.red > score.blue, disposition.size)
       : undefined;
 
-  // The line of commentary this result will carry in the app, so Slack reads the same.
-  const remark =
+  // The line of commentary this result will carry in the app, and what it does to the
+  // table's belt, so Slack reads the same.
+  const match =
     stats && disposition
-      ? commentaryForNew(stats, {
+      ? {
           sessionId,
           tableCode,
           startedAt,
           size: disposition.size,
           score,
           teams: teamsFromDisposition(disposition),
-        })
-      : "";
+        }
+      : null;
+  const remark = stats && match ? commentaryForNew(stats, match) : "";
+  const beltEvent = stats && match ? beltEventForNew(stats, tableCode, match) : null;
 
   await updateDoc(doc(db, "sessions", sessionId), {
     result: {
@@ -615,7 +652,9 @@ export const recordMatchResult = async (
   });
 
   await sendNotification(user, {
-    message: `Full time — ${describeResult(score)}${remark ? ` ${remark}` : ""}`,
+    message: `Full time — ${describeResult(score)}${remark ? ` ${remark}` : ""}${
+      beltEvent ? ` ${describeBeltEvent(beltEvent)}` : ""
+    }`,
     tableCode,
     event: "result",
     teams: notifyTeams(disposition, stats, redDelta),

@@ -43,6 +43,10 @@ const darkScheme = css`
   --md-sys-color-surface-container-highest: #32362f;
 
   --app-warning: #f2be48;
+  /* The champion's gold: bright here, where the surfaces are dark. */
+  --belt-gold: #ffd54f;
+  --belt-gold-container: #4a3a00;
+  --on-belt-gold-container: #ffe08a;
   /* The light theme's red and blue are too dark to read on these surfaces. */
   --team-red: #ff8a80;
   --team-blue: #82b1ff;
@@ -101,6 +105,13 @@ export const GlobalStyles = () => (
 
         /* App accent — amber, used for countdown warnings */
         --app-warning: #815600;
+        /* The champion's gold. A true yellow can't be read on a white card, so in this
+           theme it is a deep gold: 5.8:1 on a card and 5.0:1 on the grey of a
+           highlighted row, where small text needs 4.5:1. The badge and the banner carry
+           the brighter gold as their background instead. */
+        --belt-gold: #855f00;
+        --belt-gold-container: #ffe9a8;
+        --on-belt-gold-container: #3d2e00;
         /* The two sides of the table. Deep enough to read as small text on the grey rows
            of the match history (4.8:1 and 4.9:1; the brighter #d32f2f and #1976d2 used
            before fell just short of the 4.5:1 that small text needs). */
@@ -459,6 +470,12 @@ export const Badge = styled.span`
   letter-spacing: 0.1px;
 `;
 
+export const ChampionBadge = styled(Badge)`
+  background: var(--belt-gold-container);
+  color: var(--on-belt-gold-container);
+  white-space: nowrap;
+`;
+
 export const TonalButton = styled(Button)`
   /* M3 filled-tonal button */
   background-color: var(--md-sys-color-secondary-container);
@@ -510,6 +527,76 @@ export const Icon = styled.span<{ size?: number; fill?: number }>`
   -webkit-font-smoothing: antialiased;
   font-variation-settings: "FILL" ${(props) => props.fill ?? 0}, "wght" 400, "GRAD" 0, "opsz" 24;
 `;
+
+// The name of the player who holds the championship belt (see src/belt.ts): gold, with a
+// small medal so the colour is not the only thing that says so.
+const Gold = styled.span`
+  color: var(--belt-gold);
+  font-weight: 600;
+  & > [aria-hidden] {
+    vertical-align: -0.15em;
+    margin-right: 0.3em;
+  }
+`;
+
+const Unseen = styled.span`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+`;
+
+const Medal = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.05em;
+`;
+
+const MedalCount = styled.span`
+  font-size: 0.8em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+`;
+
+// The medal that marks the champion. Once they have defended the belt, the number of
+// times they have done so stands beside it.
+export const BeltMedal = ({ defences = 0, size = 15 }: { defences?: number; size?: number }) => (
+  <Medal aria-hidden>
+    <Icon size={size} fill={1}>
+      workspace_premium
+    </Icon>
+    {defences > 0 && <MedalCount>{defences}</MedalCount>}
+  </Medal>
+);
+
+const defended = (defences: number): string =>
+  defences > 0 ? `, defended ${defences === 1 ? "once" : `${defences} times`}` : "";
+
+// A player's name, in gold if they are the champion. `medal` can be turned off where a
+// label right beside the name already says "Champion" and room is short. `defences` is
+// how many times the champion has defended the belt, shown beside the medal.
+export const PlayerName = ({
+  name,
+  champion,
+  medal = true,
+  defences = 0,
+}: {
+  name: React.ReactNode;
+  champion: boolean;
+  medal?: boolean;
+  defences?: number;
+}) =>
+  champion ? (
+    <Gold title={`Champion: holds the belt${defended(defences)}`}>
+      {medal && <BeltMedal defences={defences} />}
+      {name}
+      {medal && <Unseen> (champion{defended(defences)})</Unseen>}
+    </Gold>
+  ) : (
+    <>{name}</>
+  );
 
 export const IconButton = styled.button`
   display: inline-flex;

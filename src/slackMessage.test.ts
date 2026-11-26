@@ -8,6 +8,12 @@ import {
 
 const APP_URL = "https://foosball-matchmaker.web.app";
 
+// The lineup joins what belongs together with no-break spaces, so Slack can't wrap a line
+// between an icon and its label or between a name and its rating.
+const GLUE = "\u00a0\u00a0";
+const DOT = `${GLUE}·${GLUE}`;
+const NBSP = "\u00a0";
+
 const doubles = [
   {
     color: "Red",
@@ -138,10 +144,10 @@ describe("slack payload", () => {
     expect(blocks[0].text?.text).toContain("2v2");
     expect(blocks[1].fields).toHaveLength(2);
     expect(blocks[1].fields?.[0].text).toBe(
-      ":red_circle:  *Red*\n:crossed_swords:  Alice\n:shield:  Bob",
+      `:red_circle:${GLUE}*Red*\n:crossed_swords:${GLUE}Alice\n:shield:${GLUE}Bob`,
     );
     expect(blocks[1].fields?.[1].text).toBe(
-      ":large_blue_circle:  *Blue*\n:crossed_swords:  Carol\n:shield:  Dave",
+      `:large_blue_circle:${GLUE}*Blue*\n:crossed_swords:${GLUE}Carol\n:shield:${GLUE}Dave`,
     );
     expect(blocks.some((block) => block.type === "context")).toBe(true);
   });
@@ -152,8 +158,8 @@ describe("slack payload", () => {
     );
 
     expect(blocks[0].text?.text).toContain("1v1");
-    expect(blocks[1].fields?.[0].text).toBe(":red_circle:  *Red*\n:dart:  Alice");
-    expect(blocks[1].fields?.[1].text).toBe(":large_blue_circle:  *Blue*\n:dart:  Bob");
+    expect(blocks[1].fields?.[0].text).toBe(`:red_circle:${GLUE}*Red*\n:dart:${GLUE}Alice`);
+    expect(blocks[1].fields?.[1].text).toBe(`:large_blue_circle:${GLUE}*Blue*\n:dart:${GLUE}Bob`);
     expect(blocks.some((block) => block.type === "context")).toBe(false);
   });
 
@@ -196,10 +202,18 @@ describe("slack payload", () => {
     const blocks = blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", rated));
 
     expect(blocks[1].fields?.[0].text).toBe(
-      ":red_circle:  *Red*  ·  avg 1012\n:crossed_swords:  Alice  ·  1042\n:shield:  Bob  ·  981",
+      [
+        `:red_circle:${GLUE}*Red*${DOT}avg${NBSP}1012`,
+        `:crossed_swords:${GLUE}Alice${DOT}1042`,
+        `:shield:${GLUE}Bob${DOT}981`,
+      ].join("\n"),
     );
     expect(blocks[1].fields?.[1].text).toBe(
-      ":large_blue_circle:  *Blue*  ·  avg 1015\n:crossed_swords:  Carol  ·  1000\n:shield:  Dave  ·  1030",
+      [
+        `:large_blue_circle:${GLUE}*Blue*${DOT}avg${NBSP}1015`,
+        `:crossed_swords:${GLUE}Carol${DOT}1000`,
+        `:shield:${GLUE}Dave${DOT}1030`,
+      ].join("\n"),
     );
   });
 
@@ -211,7 +225,12 @@ describe("slack payload", () => {
     const blocks = blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", named));
 
     expect(blocks[1].fields?.[0].text).toBe(
-      ":red_circle:  *Red*\n_The Back-Row Bandits_\n:crossed_swords:  Alice\n:shield:  Bob",
+      [
+        `:red_circle:${GLUE}*Red*`,
+        "_The Back-Row Bandits_",
+        `:crossed_swords:${GLUE}Alice`,
+        `:shield:${GLUE}Bob`,
+      ].join("\n"),
     );
     expect(blocks[1].fields?.[1].text).toContain("_Spin City_");
   });
@@ -243,7 +262,9 @@ describe("slack payload", () => {
     ]);
     const blocks = blocksOf(buildSlackPayload(APP_URL, "MG3586", "ready", "Game on!", rated));
 
-    expect(blocks[1].fields?.[0].text).toBe(":red_circle:  *Red*\n:dart:  Alice  ·  1042");
+    expect(blocks[1].fields?.[0].text).toBe(
+      `:red_circle:${GLUE}*Red*\n:dart:${GLUE}Alice${DOT}1042`,
+    );
   });
 
   it("drops ratings that aren't plausible instead of dropping the lineup", () => {
@@ -262,6 +283,51 @@ describe("slack payload", () => {
       { name: "Alice", position: "front" },
       { name: "Bob", position: "back" },
     ]);
+  });
+
+  it("marks the champion, and calls a 1v1 with them in it a title match", () => {
+    const title = [
+      { color: "Red", players: [{ name: "Alice", position: "solo", rating: 1040, champion: true }] },
+      { color: "Blue", players: [{ name: "Bob", position: "solo", rating: 990 }] },
+    ];
+    const blocks = blocksOf(
+      buildSlackPayload(APP_URL, "OFFICE", "ready", "Game on!", parseRoster(title)),
+    );
+
+    expect(blocks[0].text?.text).toContain("Title match");
+    expect(blocks[1].fields?.[0].text).toContain(`Alice${GLUE}:trophy:${DOT}1040`);
+    expect(blocks[1].fields?.[1].text).not.toContain(":trophy:");
+  });
+
+  it("marks the champion in a 2v2 without calling it a title match", () => {
+    const withChampion = doubles.map((team, index) => ({
+      ...team,
+      players: team.players.map((player, slot) => ({
+        ...player,
+        ...(index === 0 && slot === 0 ? { champion: true } : {}),
+      })),
+    }));
+    const blocks = blocksOf(
+      buildSlackPayload(APP_URL, "OFFICE", "ready", "Game on!", parseRoster(withChampion)),
+    );
+
+    expect(blocks[0].text?.text).not.toContain("Title match");
+    expect(blocks[1].fields?.[0].text).toContain(`Alice${GLUE}:trophy:`);
+  });
+
+  it("takes only a literal true as the champion mark", () => {
+    const sloppy = [
+      { color: "Red", players: [{ name: "Alice", position: "solo", champion: "yes" }] },
+      { color: "Blue", players: [{ name: "Bob", position: "solo", champion: 1 }] },
+    ];
+    const roster = parseRoster(sloppy);
+
+    expect(roster.flatMap((team) => team.players.map((player) => player.champion))).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(blocksOf(buildSlackPayload(APP_URL, "OFFICE", "ready", "Game on!", roster))[0].text?.text)
+      .not.toContain("Title match");
   });
 
   it("posts a result with what it did to every rating", () => {
@@ -292,13 +358,79 @@ describe("slack payload", () => {
 
     expect(payload.text).toBe("Full time — Red 10 – Blue 7 — Red wins.");
     expect(blocks[0].text?.text).toBe(":checkered_flag:  Full time — Red 10 – Blue 7 — Red wins.");
+    // The change is said once per side, and each player's line is just their new rating.
     expect(blocks[1].fields?.[0].text).toBe(
-      ":red_circle:  *Red*\n:crossed_swords:  Alice  ·  1042 → 1058 (+16)\n:shield:  Bob  ·  981 → 997 (+16)",
+      [
+        `:red_circle:${GLUE}*Red*${DOT}rating${NBSP}+16`,
+        `:crossed_swords:${GLUE}Alice${DOT}1058`,
+        `:shield:${GLUE}Bob${DOT}997`,
+      ].join("\n"),
     );
     expect(blocks[1].fields?.[1].text).toBe(
-      ":large_blue_circle:  *Blue*\n:crossed_swords:  Carol  ·  1000 → 984 (−16)\n:shield:  Dave  ·  1030 → 1014 (−16)",
+      [
+        `:large_blue_circle:${GLUE}*Blue*${DOT}rating${NBSP}−16`,
+        `:crossed_swords:${GLUE}Carol${DOT}984`,
+        `:shield:${GLUE}Dave${DOT}1014`,
+      ].join("\n"),
     );
     expect(blocks.some((block) => block.type === "actions")).toBe(false);
+  });
+
+  it("never leaves Slack a place to break a line except inside a name", () => {
+    const settled = parseRoster([
+      {
+        color: "Red",
+        players: [
+          { name: "Kjell-Einar Skutle", position: "front", rating: 975, delta: 12 },
+          { name: "Vinjar Nesse Kvamme", position: "back", rating: 1050, delta: 12, champion: true },
+        ],
+      },
+      {
+        color: "Blue",
+        players: [
+          { name: "Hans Christian Eikanger", position: "front", rating: 999, delta: -12 },
+          { name: "Morten Mehus", position: "back", rating: 999, delta: -12 },
+        ],
+      },
+    ]);
+    const names = settled.flatMap((team) => team.players.map((player) => player.name));
+
+    for (const event of ["ready", "result"]) {
+      const fields = blocksOf(buildSlackPayload(APP_URL, "MG3586", event, "x", settled))[1].fields!;
+      for (const line of fields.flatMap((field) => field.text.split("\n"))) {
+        // With the name taken out, nothing that is left has an ordinary space in it.
+        const rest = names.reduce((text, name) => text.replace(name, ""), line);
+        expect(rest).not.toContain(" ");
+      }
+    }
+  });
+
+  it("puts the change on each player if teammates somehow moved differently", () => {
+    const uneven = parseRoster([
+      {
+        color: "Red",
+        players: [
+          { name: "Alice", position: "front", rating: 1042, delta: 16 },
+          { name: "Bob", position: "back", rating: 981, delta: 12 },
+        ],
+      },
+      {
+        color: "Blue",
+        players: [
+          { name: "Carol", position: "front", rating: 1000, delta: -16 },
+          { name: "Dave", position: "back", rating: 1030, delta: -12 },
+        ],
+      },
+    ]);
+    const [red] = blocksOf(buildSlackPayload(APP_URL, "MG3586", "result", "x", uneven))[1].fields!;
+
+    expect(red.text).toBe(
+      [
+        `:red_circle:${GLUE}*Red*`,
+        `:crossed_swords:${GLUE}Alice${DOT}1058${NBSP}(+16)`,
+        `:shield:${GLUE}Bob${DOT}993${NBSP}(+12)`,
+      ].join("\n"),
+    );
   });
 
   it("keeps a result as plain text when no ratings came with it", () => {

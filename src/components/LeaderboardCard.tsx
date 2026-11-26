@@ -9,7 +9,18 @@ import {
   type PlayerStats,
   type Standing,
 } from "../ratings";
-import { Avatar, Badge, Card, Eyebrow, Hint, Icon } from "../ui";
+import {
+  Avatar,
+  Badge,
+  BeltMedal,
+  Card,
+  ChampionBadge,
+  Eyebrow,
+  Hint,
+  Icon,
+  PlayerName,
+} from "../ui";
+import { BELT_VACANT_DAYS, type Belt } from "../belt";
 
 const List = styled.ol`
   list-style: none;
@@ -84,6 +95,26 @@ const Landing = styled(Place)`
   color: var(--md-sys-color-primary);
   font-weight: 600;
   animation: dropIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) 0.5s both;
+`;
+
+// The explanations, folded away until asked for.
+const About = styled.details`
+  margin-top: 0.5rem;
+  & > summary {
+    width: fit-content;
+    padding: 0.15rem 0;
+    cursor: pointer;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: var(--md-sys-color-primary);
+    border-radius: var(--md-shape-small);
+    -webkit-tap-highlight-color: transparent;
+  }
+  & > summary:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
+  }
 `;
 
 const Welcome = styled(Hint)`
@@ -235,15 +266,21 @@ type Props = {
   standings: Standing[] | null;
   tableName: string;
   currentUid: string;
+  // This table's championship belt; null while the history is loading or unavailable.
+  belt: Belt | null;
 };
 
-export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => {
+export const LeaderboardCard = ({ standings, tableName, currentUid, belt }: Props) => {
   const list = useRef<HTMLOListElement>(null);
   const order = (standings ?? []).map((entry) => entry.player.uid);
   useSlideOnReorder(list, order, tableName);
 
   const own = standings?.find((entry) => entry.player.uid === currentUid);
   const welcoming = useWelcomeMoment(currentUid, !!own, own?.player.games ?? 0);
+
+  const reign = belt?.reign ?? null;
+  // A table that has never had a 1v1 has no belt to speak of.
+  const hadBelt = Object.keys(belt?.events ?? {}).length > 0;
 
   if (!standings) {
     return null;
@@ -267,6 +304,7 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
           <List ref={list}>
             {standings.map(({ player, place }) => {
               const justArrived = welcoming && player.uid === currentUid;
+              const champion = player.uid === reign?.holder.uid;
 
               return (
                 <Entry key={player.uid} data-uid={player.uid} own={player.uid === currentUid}>
@@ -276,9 +314,17 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
                   </SmallAvatar>
                   <Name>
                     <span>
-                      {player.displayName}
+                      <PlayerName name={player.displayName} champion={champion} medal={false} />
                       {player.uid === currentUid && " (you)"}
                     </span>
+                    {champion && reign && (
+                      <ChampionBadge
+                        title={`Has held the belt since ${reign.since.toLocaleDateString()}`}
+                      >
+                        <BeltMedal defences={reign.defences} size={14} />
+                        Champion
+                      </ChampionBadge>
+                    )}
                     {isNewPlayer(player) && <Badge>New</Badge>}
                   </Name>
                   <Record>
@@ -295,11 +341,27 @@ export const LeaderboardCard = ({ standings, tableName, currentUid }: Props) => 
               You're on the board at number {own.place}. Welcome to the table.
             </Welcome>
           )}
-          <Hint>
-            Games · wins–losses · rating, counted across all tables. "New" marks a player's
-            first {NEW_PLAYER_GAMES} scored games, while their rating is still settling.
-            Players with no game in the last {ACTIVE_DAYS} days are hidden.
-          </Hint>
+          {/* One line to read the columns by, and one more only when there is something to
+              do about the belt. The rest is a tap away, so the board itself stays short. */}
+          <Hint>Games · wins–losses · rating</Hint>
+          {!reign && hadBelt && (
+            <Hint>The belt is vacant. Win the next 1v1 here to claim it.</Hint>
+          )}
+          <About>
+            <summary>How the board works</summary>
+            <Hint>
+              Ratings are counted across all tables. "New" marks a player's first{" "}
+              {NEW_PLAYER_GAMES} scored games, while their rating is still settling. Players with
+              no game in the last {ACTIVE_DAYS} days are hidden.
+            </Hint>
+            {hadBelt && (
+              <Hint>
+                The Champion holds the table's belt, and the number by the medal is how many
+                times they have defended it. Beat them in a 1v1 and it is yours. A belt that
+                isn't played for in {BELT_VACANT_DAYS} days falls vacant.
+              </Hint>
+            )}
+          </About>
         </>
       )}
     </Card>

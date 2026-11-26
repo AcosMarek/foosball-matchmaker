@@ -61,6 +61,10 @@ type Props = {
   activeSession: Session | null;
   sessionPlayers: JoinedPlayer[];
   stats: RatingStats | null;
+  // Who holds this table's championship belt, if anyone, and how often they have
+  // defended it.
+  championUid: string | null;
+  beltDefences: number;
   // Set when the app was opened through Slack's "Jump in" button: when that post went
   // out, in ms. The card then joins the match it was posted for, once, and reports back
   // through `onAutoJoinDone` whether or not there was anything to join.
@@ -75,6 +79,8 @@ export const MatchmakingCard = ({
   activeSession,
   sessionPlayers,
   stats,
+  championUid,
+  beltDefences,
   autoJoinStamp,
   onAutoJoinDone,
 }: Props) => {
@@ -291,6 +297,9 @@ export const MatchmakingCard = ({
         cooldownMs={cooldownMs}
         stats={stats}
         teamNames={activeSession && targetPlayers === 4 ? teamNamesFor(activeSession.id) : null}
+        championUid={championUid}
+        beltDefences={beltDefences}
+        currentUid={user?.uid ?? ""}
       />
       {feedback && <Hint>{feedback}</Hint>}
     </Card>

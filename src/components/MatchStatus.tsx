@@ -7,7 +7,7 @@ import {
   type MatchPhase,
 } from "../matchmaking";
 import { ratingOf, type RatingStats } from "../ratings";
-import { Badge, CountdownRing, Icon, LiveDot, Rating, StatValue } from "../ui";
+import { Badge, CountdownRing, Icon, LiveDot, PlayerName, Rating, StatValue } from "../ui";
 import type { JoinedPlayer, Session } from "../types";
 import { DispositionAlert } from "./DispositionAlert";
 import { IdleTable } from "./IdleTable";
@@ -83,6 +83,22 @@ const ChipIndex = styled.span`
   flex: none;
 `;
 
+// Says so when the champion is in the match, and whether the belt is at stake.
+const TitleNote = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--md-shape-small);
+  background: var(--belt-gold-container);
+  color: var(--on-belt-gold-container);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  font-weight: 500;
+  animation: riseIn 0.4s ease-out both;
+`;
+
 const CountWrap = styled.div`
   margin-top: 0.9rem;
 `;
@@ -121,6 +137,11 @@ type Props = {
   stats: RatingStats | null;
   // Made-up names for the two sides of a 2v2; null otherwise.
   teamNames: [string, string] | null;
+  // Who holds this table's championship belt, if anyone, and how often they have
+  // defended it.
+  championUid: string | null;
+  beltDefences: number;
+  currentUid: string;
 };
 
 export const MatchStatus = ({
@@ -136,6 +157,9 @@ export const MatchStatus = ({
   cooldownMs,
   stats,
   teamNames,
+  championUid,
+  beltDefences,
+  currentUid,
 }: Props) => {
   if (phase === "expired") {
     return (
@@ -160,6 +184,12 @@ export const MatchStatus = ({
   }
 
   const remaining = targetPlayers - sessionPlayers.length;
+  // The champion counts as playing only if they have one of the match's places, not if
+  // they are queued behind it.
+  const champion = sessionPlayers
+    .slice(0, targetPlayers)
+    .find((player) => player.uid === championUid);
+  const titleMatch = !!champion && targetPlayers === 2;
 
   return (
     <StatusBlock>
@@ -184,11 +214,32 @@ export const MatchStatus = ({
           {sessionPlayers.map((player, index) => (
             <Chip key={player.uid}>
               <ChipIndex>{index + 1}</ChipIndex>
-              {player.displayName}
+              <PlayerName
+                name={player.displayName}
+                champion={player.uid === championUid}
+                defences={beltDefences}
+              />
               {stats && <Rating>{ratingOf(stats, player.uid)}</Rating>}
             </Chip>
           ))}
         </PlayerChips>
+      )}
+
+      {/* Once a title match has filled, the lineup below says it in its own headline. */}
+      {champion && !(titleMatch && disposition) && (
+        <TitleNote role="status">
+          <Icon size={18} fill={1} aria-hidden>
+            workspace_premium
+          </Icon>
+          <span>
+            {champion.uid === currentUid
+              ? "You are the reigning champion."
+              : `${champion.displayName} is the reigning champion.`}{" "}
+            {titleMatch
+              ? "The belt is on the line in this match."
+              : "The belt is safe here: it only changes hands in a 1v1."}
+          </span>
+        </TitleNote>
       )}
 
       {phase === "filling" && (
@@ -220,6 +271,8 @@ export const MatchStatus = ({
           waiting={waiting}
           stats={stats}
           teamNames={teamNames}
+          championUid={championUid}
+          beltDefences={beltDefences}
         />
       )}
     </StatusBlock>

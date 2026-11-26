@@ -21,6 +21,8 @@ type Props = {
   // Commentary per match, by session id.
   notes: Record<string, string>;
   currentUid: string;
+  // Who holds this table's championship belt now, if anyone.
+  championUid: string | null;
 };
 
 const Score = styled.span`
@@ -45,7 +47,14 @@ const Unrated = styled.div`
 // the rating history, which holds all scored matches, rather than from the recent-session
 // listener: that one only sees the last few sessions, most of them unfilled, so results
 // used to drop out of view within days.
-export const MatchHistoryCard = ({ tableCode, sessions, stats, notes, currentUid }: Props) => {
+export const MatchHistoryCard = ({
+  tableCode,
+  sessions,
+  stats,
+  notes,
+  currentUid,
+  championUid,
+}: Props) => {
   const rated = stats ? matchesFor(stats, { tableCode }) : [];
   const unrated = sessions.filter((session) => session.result && !stats?.matches[session.id]);
   if (rated.length === 0 && unrated.length === 0) {
@@ -60,7 +69,14 @@ export const MatchHistoryCard = ({ tableCode, sessions, stats, notes, currentUid
         </Icon>
         Match history
       </Eyebrow>
-      {rated.length > 0 && <RatedMatchList matches={rated} currentUid={currentUid} notes={notes} />}
+      {rated.length > 0 && (
+        <RatedMatchList
+          matches={rated}
+          currentUid={currentUid}
+          notes={notes}
+          championUid={championUid}
+        />
+      )}
       {unrated.length > 0 && (
         <Unrated>
           <MatchList>

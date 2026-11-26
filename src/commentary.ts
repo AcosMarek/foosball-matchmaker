@@ -186,7 +186,8 @@ const REVENGE_WINDOW_MS = 24 * 60 * 60 * 1000;
 // about one chance in three, or less.
 const UPSET_SHARE = 0.65;
 
-const firstName = (player: RatedPlayer): string =>
+// What a player is called in a remark: their first name, as colleagues would say it.
+export const firstName = (player: RatedPlayer): string =>
   player.displayName.trim().split(/\s+/)[0] || "Player";
 
 // "Ada", "Ada & Bo".
