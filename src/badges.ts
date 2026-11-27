@@ -32,7 +32,10 @@ const BUSY_MIN_GAMES = 5;
 const ROOKIE_MIN_GAMES = 3;
 // A player stops being a rookie, and can start being teased, at this many games.
 export const SEASONED_GAMES = 20;
-const WALL_MIN_GAMES = 5;
+// No badge looks at who stood at the front or the back: tables rotate through the
+// positions by rules of their own, so the app's idea of them says little. The Wall
+// counts the goals a player's side let in, wherever they stood.
+const WALL_MIN_GAMES = 8;
 // A win counts as giant-killing when the ratings gave the winners this chance or less.
 const UPSET_ODDS = 0.4;
 const DIVORCE_MIN_GAMES = 4;
@@ -65,7 +68,7 @@ export const BADGES: BadgeInfo[] = [
     name: "The Wall",
     icon: "shield",
     emoji: ":shield:",
-    rule: `Lets in the fewest goals a game at the back, over at least ${WALL_MIN_GAMES} games in ${BADGE_DAYS} days.`,
+    rule: `Lets in the fewest goals a game, over at least ${WALL_MIN_GAMES} games in ${BADGE_DAYS} days.`,
   },
   {
     id: "giantKiller",
@@ -186,8 +189,8 @@ export const badgesAt = (
     });
   }
 
-  // Per player over the month: games and rating won here, and how the back held up.
-  type Month = { uid: string; games: number; gain: number; backGames: number; conceded: number };
+  // Per player over the month: games and rating won here, and goals their side let in.
+  type Month = { uid: string; games: number; gain: number; conceded: number };
   const monthly = new Map<string, Month>();
   // Per pair of teammates over the month.
   type Pair = { uids: [string, string]; games: number; wins: number };
@@ -204,15 +207,11 @@ export const badgesAt = (
           uid: player.uid,
           games: 0,
           gain: 0,
-          backGames: 0,
           conceded: 0,
         };
         entry.games += 1;
         entry.gain += match.delta[index];
-        if (player.position === "back") {
-          entry.backGames += 1;
-          entry.conceded += conceded;
-        }
+        entry.conceded += conceded;
         monthly.set(player.uid, entry);
       }
 
@@ -240,17 +239,17 @@ export const badgesAt = (
   }
 
   const wall = [...monthly.values()]
-    .filter((entry) => entry.backGames >= WALL_MIN_GAMES)
+    .filter((entry) => entry.games >= WALL_MIN_GAMES)
     .sort(
       (a, b) =>
-        a.conceded / a.backGames - b.conceded / b.backGames ||
-        b.backGames - a.backGames ||
+        a.conceded / a.games - b.conceded / b.games ||
+        b.games - a.games ||
         a.uid.localeCompare(b.uid),
     )[0];
   if (wall) {
     held.set("wall", {
       holders: [holder(wall.uid)],
-      reason: `Lets in ${(wall.conceded / wall.backGames).toFixed(1)} goals a game at the back, over ${plural(wall.backGames, "game")}.`,
+      reason: `Lets in ${(wall.conceded / wall.games).toFixed(1)} goals a game, over ${plural(wall.games, "game")}.`,
     });
   }
 

@@ -133,16 +133,29 @@ describe("badges", () => {
   });
 
   describe("The Wall", () => {
-    it("goes to the back player who lets in the fewest goals a game", () => {
-      // Ada plays back for the winners and lets in 2 a game; Di plays back for the losers.
-      const matches = [40, 41, 42, 43, 44].map((at) =>
-        game(at, ["bo", "ada"], ["cy", "di"], { loserGoals: 2 }),
-      );
-      const badge = held(matches, "wall");
+    // Ada wins eight 1v1s, letting in 2 a game.
+    const tight = [40, 41, 42, 43, 44, 45, 46, 47].map((at) =>
+      game(at, ["ada"], ["bo"], { loserGoals: 2 }),
+    );
+
+    it("goes to the player whose side lets in the fewest goals a game", () => {
+      const badge = held(tight, "wall");
 
       expect(holders(badge)).toEqual(["ada"]);
-      expect(badge?.reason).toBe("Lets in 2.0 goals a game at the back, over 5 games.");
-      expect(held(matches.slice(1), "wall")).toBeUndefined();
+      expect(badge?.reason).toBe("Lets in 2.0 goals a game, over 8 games.");
+      expect(held(tight.slice(1), "wall")).toBeUndefined();
+    });
+
+    it("counts a 2v2 for both partners, wherever they stood", () => {
+      // Cy and Di let in 1 a game, eight times over: fewer than Ada. Cy, first to be
+      // listed, is at the front and Di at the back, and neither has the edge for it.
+      const tighter = [48, 49, 50, 51, 52, 53, 54, 55].map((at) =>
+        game(at, ["cy", "di"], ["ed", "fay"], { loserGoals: 1 }),
+      );
+      const badge = held([...tight, ...tighter], "wall");
+
+      expect(holders(badge)).toEqual(["cy"]);
+      expect(badge?.reason).toBe("Lets in 1.0 goals a game, over 8 games.");
     });
   });
 
