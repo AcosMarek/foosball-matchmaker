@@ -154,6 +154,9 @@ type Props = {
   note?: string;
   // The badges this match handed to its players, once the ratings include it.
   badges?: BadgeChange[];
+  // Shown on opening the app, for a result that came in while this player wasn't looking:
+  // the same card, without the confetti and labelled as their last game.
+  missed?: boolean;
   currentUid: string;
   onClose: () => void;
 };
@@ -167,6 +170,7 @@ export const ResultCelebration = ({
   match,
   note,
   badges = [],
+  missed = false,
   currentUid,
   onClose,
 }: Props) => {
@@ -187,11 +191,25 @@ export const ResultCelebration = ({
 
   // The badges arrive with the ratings, a moment after the card; the wait starts over
   // then, so they get their full time.
+  // The time only runs while the page can be seen, so a card that arrives in a tab left
+  // in the background is still there when its reader comes back.
   const readingTime = AUTO_CLOSE_MS + badges.length * BADGE_READ_MS;
   useEffect(() => {
-    const timer = setTimeout(onClose, readingTime);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") {
+        timer = setTimeout(onClose, readingTime);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    arm();
+    document.addEventListener("visibilitychange", arm);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", arm);
+    };
   }, [onClose, readingTime]);
 
   // Thrown once per match: each piece gets its own direction, spin and head start.
@@ -233,7 +251,7 @@ export const ResultCelebration = ({
 
   return (
     <Stage role="status">
-      {pieces.map((piece, index) => (
+      {(missed ? [] : pieces).map((piece, index) => (
         <Piece
           key={index}
           aria-hidden
@@ -255,7 +273,7 @@ export const ResultCelebration = ({
         <Icon size={16} aria-hidden>
           sports_score
         </Icon>
-        Full time · {matchSizeLabel(session.targetPlayers)}
+        {missed ? "Your last game" : "Full time"} · {matchSizeLabel(session.targetPlayers)}
       </Eyebrow>
       <Score>
         <span style={redWon ? { color: winnerColor } : undefined}>Red {result.red}</span>

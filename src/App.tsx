@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isValidTableCode, normalizeTableCode, parseJoinStamp } from "./matchmaking";
 import { getTable, leaveTable, registerOnTable } from "./api";
 import { Brand, GlobalStyles, RodMark, TopBar, Wrapper } from "./ui";
@@ -7,6 +7,7 @@ import {
   useAuth,
   useInstallHint,
   useJustScored,
+  useMissedResult,
   useNotifications,
   usePendingResults,
   useRecentSessions,
@@ -256,8 +257,19 @@ export default function App() {
   const pendingResults = usePendingResults(user, recentSessions);
   const justScored = useJustScored(pendingResults, recentSessions);
   useScoreReminders(user, selectedTable, recentSessions);
-  // The match just scored, once the ratings include it, and the badges it handed out.
-  const scoredMatch = (justScored.session && stats?.matches[justScored.session.id]) || null;
+  // Their last game's result, for a player who wasn't looking when it came in. A result
+  // arriving now always comes first.
+  const missed = useMissedResult(user, selectedTable, recentSessions, cameToJoin.current);
+  const resultSession = justScored.session ?? missed.session;
+  const { clear: clearJustScored } = justScored;
+  const { clear: clearMissed, markSeen } = missed;
+  const closeResult = useCallback(() => {
+    markSeen();
+    clearJustScored();
+    clearMissed();
+  }, [markSeen, clearJustScored, clearMissed]);
+  // The match on the card, once the ratings include it, and the badges it handed out.
+  const scoredMatch = (resultSession && stats?.matches[resultSession.id]) || null;
   const badgesWon = useMemo(
     () => (stats && scoredMatch ? badgesWonIn(stats, scoredMatch) : []),
     [stats, scoredMatch],
@@ -342,15 +354,16 @@ export default function App() {
             onAutoJoinDone={() => setAutoJoin(null)}
           />
 
-          {justScored.session && (
+          {resultSession && (
             <ResultCelebration
-              key={justScored.session.id}
-              session={justScored.session}
+              key={resultSession.id}
+              session={resultSession}
               match={scoredMatch}
-              note={notes[justScored.session.id]}
+              note={notes[resultSession.id]}
               badges={badgesWon}
+              missed={!justScored.session}
               currentUid={user.uid}
-              onClose={justScored.clear}
+              onClose={closeResult}
             />
           )}
 

@@ -16,6 +16,8 @@ export type Departure = {
 export type MatchResult = MatchScore & {
   lineup: string;
   recordedAt: Date | null;
+  // Who logged the score (account id).
+  recordedBy?: string;
 };
 
 export type Session = {

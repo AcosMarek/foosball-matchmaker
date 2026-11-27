@@ -35,6 +35,7 @@ import {
   type ScoredMatch,
   type RatingStats,
 } from "./ratings";
+import { missedResult } from "./missedResult";
 import { toDate } from "./utils";
 import type { FoosballTable, JoinedPlayer, Session } from "./types";
 
@@ -62,6 +63,7 @@ const readSession = (snapshot: QueryDocumentSnapshot<DocumentData>): Session | n
           blue: Number(result.blue ?? 0),
           lineup: String(result.lineup || ""),
           recordedAt: toDate(result.recordedAt),
+          recordedBy: String(result.recordedBy || ""),
         }
       : null,
     cancelled: !!data.cancelled,
@@ -353,6 +355,75 @@ export const useJustScored = (
   );
 
   return { session, clear };
+};
+
+const RESULT_SEEN_PREFIX = "foosball:resultSeen:";
+
+// When a result card was last closed on this device by this player, in ms; 0 if never.
+const readResultSeen = (uid: string): number => {
+  try {
+    return Number(localStorage.getItem(RESULT_SEEN_PREFIX + uid)) || 0;
+  } catch {
+    // Storage unavailable (private browsing): nothing can be remembered, so nothing is
+    // offered as missed, which beats offering the same result on every visit.
+    return Number.MAX_SAFE_INTEGER;
+  }
+};
+
+// The result of the player's last game on this table, for someone who wasn't looking when
+// it came in (see src/missedResult.ts). It is decided once per table, when the table's
+// sessions first arrive: after that, results come in live and useJustScored has them.
+// `skip` is for a visit that began with Slack's "Jump in", which is about the next game.
+// `markSeen` records that a result card was closed just now, live or not.
+export const useMissedResult = (
+  user: User | null,
+  tableCode: string,
+  sessions: Session[],
+  skip: boolean,
+): { session: Session | null; clear: () => void; markSeen: () => void } => {
+  const uid = user?.uid ?? "";
+  const decidedFor = useRef("");
+  // The sessions held when the table was last switched: they are the previous table's,
+  // and stay in hand until the new table's arrive.
+  const leftover = useRef({ tableCode, sessions });
+  const [missedId, setMissedId] = useState("");
+
+  useEffect(() => {
+    if (leftover.current.tableCode !== tableCode) {
+      leftover.current = { tableCode, sessions };
+    }
+    if (
+      !uid ||
+      !tableCode ||
+      sessions.length === 0 ||
+      sessions === leftover.current.sessions ||
+      decidedFor.current === tableCode
+    ) {
+      return;
+    }
+
+    decidedFor.current = tableCode;
+    const missed = skip ? null : missedResult(sessions, uid, readResultSeen(uid), Date.now());
+    setMissedId(missed?.id ?? "");
+  }, [uid, tableCode, sessions, skip]);
+
+  const markSeen = useCallback(() => {
+    try {
+      localStorage.setItem(RESULT_SEEN_PREFIX + uid, String(Date.now()));
+    } catch {
+      // Not remembered, then.
+    }
+  }, [uid]);
+  const clear = useCallback(() => {
+    markSeen();
+    setMissedId("");
+  }, [markSeen]);
+  const session = useMemo(
+    () => sessions.find((entry) => entry.id === missedId && entry.result) ?? null,
+    [sessions, missedId],
+  );
+
+  return { session, clear, markSeen };
 };
 
 // Nudges a match's players to log their score once it has sat open for a while. Nothing
