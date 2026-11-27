@@ -75,6 +75,36 @@ const Name = styled.span`
   }
 `;
 
+// The player's name is the button that opens their statistics, and its hit area is
+// stretched over the whole row, so the row can be tapped anywhere.
+const NameButton = styled.button`
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--md-shape-small);
+  }
+  &:hover::after {
+    background: color-mix(in srgb, var(--md-sys-color-on-surface) 6%, transparent);
+  }
+  &:focus-visible {
+    outline: none;
+  }
+  &:focus-visible::after {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: -2px;
+  }
+`;
+
 const Record = styled.span`
   flex: none;
   font-size: 0.75rem;
@@ -268,9 +298,17 @@ type Props = {
   currentUid: string;
   // This table's championship belt; null while the history is loading or unavailable.
   belt: Belt | null;
+  // Opens a player's statistics.
+  onOpenPlayer: (uid: string) => void;
 };
 
-export const LeaderboardCard = ({ standings, tableName, currentUid, belt }: Props) => {
+export const LeaderboardCard = ({
+  standings,
+  tableName,
+  currentUid,
+  belt,
+  onOpenPlayer,
+}: Props) => {
   const list = useRef<HTMLOListElement>(null);
   const order = (standings ?? []).map((entry) => entry.player.uid);
   useSlideOnReorder(list, order, tableName);
@@ -313,14 +351,21 @@ export const LeaderboardCard = ({ standings, tableName, currentUid, belt }: Prop
                     {player.displayName.trim().charAt(0).toUpperCase() || "?"}
                   </SmallAvatar>
                   <Name>
-                    <span>
+                    <NameButton
+                      type="button"
+                      // The row's one tooltip, since the button covers the row.
+                      title={
+                        champion && reign
+                          ? `Champion since ${reign.since.toLocaleDateString()}. Show statistics`
+                          : "Show statistics"
+                      }
+                      onClick={() => onOpenPlayer(player.uid)}
+                    >
                       <PlayerName name={player.displayName} champion={champion} medal={false} />
                       {player.uid === currentUid && " (you)"}
-                    </span>
+                    </NameButton>
                     {champion && reign && (
-                      <ChampionBadge
-                        title={`Has held the belt since ${reign.since.toLocaleDateString()}`}
-                      >
+                      <ChampionBadge>
                         <BeltMedal defences={reign.defences} size={14} />
                         Champion
                       </ChampionBadge>
@@ -352,7 +397,8 @@ export const LeaderboardCard = ({ standings, tableName, currentUid, belt }: Prop
             <Hint>
               Ratings are counted across all tables. "New" marks a player's first{" "}
               {NEW_PLAYER_GAMES} scored games, while their rating is still settling. Players with
-              no game in the last {ACTIVE_DAYS} days are hidden.
+              no game in the last {ACTIVE_DAYS} days are hidden. Tap a player to see their
+              statistics and badges.
             </Hint>
             {hadBelt && (
               <Hint>

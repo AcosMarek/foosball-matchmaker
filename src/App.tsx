@@ -32,6 +32,7 @@ import { StatsDialog } from "./components/StatsDialog";
 import { matchesFor, tableStandings } from "./ratings";
 import { matchCommentary } from "./commentary";
 import { beltOf, describeBeltEvent } from "./belt";
+import { badgesAt } from "./badges";
 import { RecordResultCard } from "./components/RecordResultCard";
 import { ResultCelebration } from "./components/ResultCelebration";
 import { QrCard } from "./components/QrCard";
@@ -99,7 +100,9 @@ export default function App() {
     () => (stats && selectedTable ? tableStandings(stats, selectedTable) : null),
     [stats, selectedTable],
   );
-  const [statsOpen, setStatsOpen] = useState(false);
+  // Whose statistics are open (an account id): the player's own from the top bar, or
+  // anyone's by tapping them on the leaderboard. Null while the dialog is closed.
+  const [statsFor, setStatsFor] = useState<string | null>(null);
   // A line of commentary for every scored match, by session id.
   const commentary = useMemo(() => (stats ? matchCommentary(stats) : {}), [stats]);
   // This table's championship belt: who holds it, and what each 1v1 did to it.
@@ -108,6 +111,11 @@ export default function App() {
     [stats, selectedTable],
   );
   const championUid = belt?.reign?.holder.uid ?? null;
+  // Who holds which badge on this table right now.
+  const badges = useMemo(
+    () => (stats && selectedTable ? badgesAt(stats, selectedTable) : []),
+    [stats, selectedTable],
+  );
   // The commentary for this table's matches, with what happened to the belt added.
   const notes = useMemo(() => {
     const merged = { ...commentary };
@@ -268,7 +276,7 @@ export default function App() {
             permission={notifications.permission}
             onRequestNotifications={notifications.requestPermission}
             onShowInstallHint={installHint.needed ? installHint.show : undefined}
-            onOpenStats={selectedTable ? () => setStatsOpen(true) : undefined}
+            onOpenStats={selectedTable ? () => setStatsFor(user.uid) : undefined}
           />
         )}
       </TopBar>
@@ -285,16 +293,19 @@ export default function App() {
         <InstallPrompt onDismiss={installHint.dismiss} onSilence={installHint.silence} />
       )}
 
-      {user && statsOpen && (
+      {user && statsFor && (
         <StatsDialog
-          player={stats?.players.find((player) => player.uid === user.uid) ?? null}
-          place={standings?.find((entry) => entry.player.uid === user.uid)?.place ?? null}
+          key={statsFor}
+          player={stats?.players.find((player) => player.uid === statsFor) ?? null}
+          own={statsFor === user.uid}
+          place={standings?.find((entry) => entry.player.uid === statsFor)?.place ?? null}
           placedCount={standings?.length ?? 0}
           tableName={selectedTableName}
-          matches={stats ? matchesFor(stats, { uid: user.uid }) : []}
+          badges={badges}
+          matches={stats ? matchesFor(stats, { uid: statsFor }) : []}
           tableLabel={(code) => visited.find((table) => table.code === code)?.name || code}
           notes={commentary}
-          onClose={() => setStatsOpen(false)}
+          onClose={() => setStatsFor(null)}
         />
       )}
 
@@ -352,6 +363,7 @@ export default function App() {
               tableName={selectedTableName}
               currentUid={user.uid}
               belt={belt}
+              onOpenPlayer={setStatsFor}
             />
           )}
 

@@ -1,7 +1,8 @@
 // The .js extensions are required: package.json sets "type": "module", so the compiled
-// function runs as ESM and Node will not resolve an extensionless relative import. Both
-// src modules are free of runtime imports of their own, which is what lets a serverless
-// function load them as they are.
+// function runs as ESM and Node will not resolve an extensionless relative import. The
+// src modules either have no runtime imports of their own or spell them the same way
+// (src/badges.ts), which is what lets a serverless function load them as they are.
+import { badgeChanges } from "../../src/badges.js";
 import { buildMatchDisposition, isValidScore, type MatchPlayer } from "../../src/matchmaking.js";
 import {
   NEW_PLAYER_GAMES,
@@ -92,6 +93,7 @@ export const toScoredMatch = (
     size,
     score,
     teams,
+    startedBy: typeof data.startedBy === "string" ? data.startedBy : "",
   };
 };
 
@@ -113,6 +115,15 @@ export type WeeklyRecap = {
   // The top of the table's leaderboard as it stands.
   // `isNew` marks a rating built on only a few games, which can still swing a lot.
   top: { name: string; rating: number; isNew: boolean }[];
+  // The badges (src/badges.ts) that found a new holder during the week.
+  badges: {
+    name: string;
+    emoji: string;
+    holders: string[];
+    // Who held it at the start of the week; empty when nobody did.
+    previous: string[];
+    reason: string;
+  }[];
 };
 
 const MAX_NAMES = 3;
@@ -209,6 +220,13 @@ export const buildWeeklyRecap = (
         rating: player.rating,
         isNew: isNewPlayer(player),
       })),
+    badges: badgeChanges(stats, tableCode, week.start, week.end).map((change) => ({
+      name: change.badge.name,
+      emoji: change.badge.emoji,
+      holders: change.holders.map((holder) => holder.displayName),
+      previous: change.previous.map((holder) => holder.displayName),
+      reason: change.reason,
+    })),
   };
 };
 
@@ -266,6 +284,18 @@ const recapLines = (recap: WeeklyRecap): string[] => {
 
   return lines;
 };
+
+// One line per badge that changed hands: who has it now, whom they took it from, and the
+// figures that earned it.
+const badgeLines = (recap: WeeklyRecap): string[] =>
+  recap.badges.map(({ name, emoji, holders, previous, reason }) => {
+    const taken =
+      previous.length > 0
+        ? ` take${holders.length === 1 ? "s" : ""} it from ${listNames(previous)}`
+        : "";
+
+    return `${emoji}  *${escapeSlack(name)}*: ${listNames(holders)}${taken}. ${escapeSlack(reason)}`;
+  });
 
 const tableButton = (appUrl: string, tableCode: string, label: string) =>
   appUrl
@@ -338,6 +368,7 @@ export const buildRecapPayload = (
 ) => {
   const title = `Week in review · ${escapeSlack(tableName)} · ${formatWeek(week)}`;
   const lines = recapLines(recap);
+  const badges = badgeLines(recap);
   const footnote = recap.top.some((entry) => entry.isNew)
     ? [
         {
@@ -358,6 +389,15 @@ export const buildRecapPayload = (
       { type: "section", text: { type: "mrkdwn", text: `:trophy:  *${title}*` } },
       { type: "section", text: { type: "mrkdwn", text: lines.join("\n") } },
       ...footnote,
+      // Left out in a week when every badge stayed where it was.
+      ...(badges.length > 0
+        ? [
+            {
+              type: "section",
+              text: { type: "mrkdwn", text: ["*Badges changed hands*", ...badges].join("\n") },
+            },
+          ]
+        : []),
       ...tableButton(appUrl, tableCode, "Open table"),
     ],
   };

@@ -436,6 +436,7 @@ const readScoredMatch = (
     size,
     score,
     teams,
+    startedBy: typeof data.startedBy === "string" ? data.startedBy : "",
   };
 };
 

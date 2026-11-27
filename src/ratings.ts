@@ -41,6 +41,8 @@ export type ScoredMatch = {
   size: MatchSize;
   score: MatchScore;
   teams: [RatedTeam, RatedTeam];
+  // Who started the match (account id). Ratings ignore it; the badges count it.
+  startedBy?: string;
 };
 
 export type Tally = { games: number; wins: number };

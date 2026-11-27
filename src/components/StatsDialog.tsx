@@ -11,6 +11,7 @@ import {
   type PlayerStats,
   type Versus,
 } from "../ratings";
+import { BADGES, type BadgeHolder, type HeldBadge } from "../badges";
 import { Delta, Dialog, Eyebrow, Hint, Icon, IconButton, thinScrollbar } from "../ui";
 import { RatedMatchList } from "./RatedMatchList";
 
@@ -71,6 +72,58 @@ const Line = styled.div`
   font-variant-numeric: tabular-nums;
   & > :first-of-type {
     color: var(--md-sys-color-on-surface-variant);
+  }
+`;
+
+// The badges this player holds, and behind a fold every badge the table hands out.
+const Badges = styled.div`
+  padding: 0.45rem 0 0.2rem;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+`;
+
+const BadgeRow = styled.div<{ vacant?: boolean }>`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: ${(props) =>
+    props.vacant ? "var(--md-sys-color-on-surface-variant)" : "var(--md-sys-color-on-surface)"};
+  /* The icon. */
+  & > :first-child {
+    flex: none;
+    margin-top: 0.05rem;
+    color: ${(props) =>
+      props.vacant ? "var(--md-sys-color-outline)" : "var(--md-sys-color-primary)"};
+  }
+`;
+
+const BadgeName = styled.span`
+  font-weight: 500;
+`;
+
+const BadgeNote = styled.div`
+  font-size: 0.8125rem;
+  line-height: 1.15rem;
+  color: var(--md-sys-color-on-surface-variant);
+`;
+
+const AllBadges = styled.details`
+  & > summary {
+    width: fit-content;
+    padding: 0.2rem 0;
+    cursor: pointer;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 500;
+    color: var(--md-sys-color-primary);
+    border-radius: var(--md-shape-small);
+    -webkit-tap-highlight-color: transparent;
+  }
+  & > summary:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
   }
 `;
 
@@ -171,14 +224,81 @@ const percent = (value: number | null): string => (value === null ? "–" : `${v
 const record = (entry: Versus | null): string =>
   entry ? `${entry.displayName} · ${entry.wins}–${entry.games - entry.wins}` : "–";
 
+const firstName = (displayName: string): string => displayName.trim().split(/\s+/)[0] || "Player";
+
+const namesOf = (holders: BadgeHolder[]): string =>
+  holders.map((holder) => holder.displayName).join(" & ");
+
+const BadgeIcon = ({ name }: { name: string }) => (
+  <Icon size={20} aria-hidden>
+    {name}
+  </Icon>
+);
+
+// The badges `uid` holds, each with the figures behind it; then, folded away, the whole
+// set for the table, with how to earn the ones nobody holds.
+const BadgeSection = ({
+  uid,
+  badges,
+  tableName,
+}: {
+  uid: string;
+  badges: HeldBadge[];
+  tableName: string;
+}) => {
+  const mine = badges.filter((held) => held.holders.some((holder) => holder.uid === uid));
+
+  return (
+    <Badges>
+      {mine.map((held) => {
+        const partners = held.holders.filter((holder) => holder.uid !== uid);
+
+        return (
+          <BadgeRow key={held.badge.id}>
+            <BadgeIcon name={held.badge.icon} />
+            <div>
+              <BadgeName>{held.badge.name}</BadgeName>
+              <BadgeNote>
+                {partners.length > 0 && `With ${namesOf(partners)}. `}
+                {held.reason}
+              </BadgeNote>
+            </div>
+          </BadgeRow>
+        );
+      })}
+      <AllBadges>
+        <summary>Badges at {tableName}</summary>
+        {BADGES.map((badge) => {
+          const held = badges.find((entry) => entry.badge.id === badge.id);
+
+          return (
+            <BadgeRow key={badge.id} vacant={!held}>
+              <BadgeIcon name={badge.icon} />
+              <div>
+                <BadgeName>{badge.name}</BadgeName>
+                {held ? ` · ${namesOf(held.holders)}` : " · nobody yet"}
+                <BadgeNote>{held ? held.reason : badge.rule}</BadgeNote>
+              </div>
+            </BadgeRow>
+          );
+        })}
+      </AllBadges>
+    </Badges>
+  );
+};
+
 type Props = {
   // Null until this player has a scored game on any table.
   player: PlayerStats | null;
+  // Whether these are the viewer's own statistics, which decides how they are worded.
+  own: boolean;
   // Place on the selected table's leaderboard (null when not on it), out of the
   // `placedCount` players listed there.
   place: number | null;
   placedCount: number;
   tableName: string;
+  // Every badge held on the selected table right now.
+  badges: HeldBadge[];
   // This player's rated matches on every table, newest first.
   matches: MatchRating[];
   tableLabel: (tableCode: string) => string;
@@ -189,9 +309,11 @@ type Props = {
 
 export const StatsDialog = ({
   player,
+  own,
   place,
   placedCount,
   tableName,
+  badges,
   matches,
   tableLabel,
   notes,
@@ -226,7 +348,7 @@ export const StatsDialog = ({
           <Icon size={16} aria-hidden>
             bar_chart
           </Icon>
-          Your statistics · all tables
+          {own || !player ? "Your statistics" : player.displayName} · all tables
         </Eyebrow>
         <IconButton
           type="button"
@@ -288,14 +410,6 @@ export const StatsDialog = ({
 
           <Trend player={player} />
 
-          {player.front.games + player.back.games > 0 && (
-            <Line>
-              <span>Front / back</span>
-              <span>
-                {percent(winRate(player.front))} · {percent(winRate(player.back))}
-              </span>
-            </Line>
-          )}
           <Line>
             <span>Goals for / against</span>
             <span>
@@ -321,8 +435,10 @@ export const StatsDialog = ({
             </span>
           </Line>
 
+          <BadgeSection uid={player.uid} badges={badges} tableName={tableName} />
+
           <History>
-            <HistoryLabel>Your matches</HistoryLabel>
+            <HistoryLabel>{own ? "Your" : `${firstName(player.displayName)}'s`} matches</HistoryLabel>
             <HistoryScroll>
               <RatedMatchList
                 matches={matches}

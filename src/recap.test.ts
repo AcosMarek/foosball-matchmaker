@@ -123,6 +123,50 @@ describe("weekly recap", () => {
     expect(calm.climber?.name).toBe("ADA");
   });
 
+  it("reports the badges that changed hands in the week", () => {
+    // Bo's win over Ada, well ahead of him by then, is the month's least likely result.
+    const killer = recap.badges.find((badge) => badge.name === "Giant Killer");
+    expect(killer).toMatchObject({ holders: ["BO"], previous: [] });
+
+    const payload = buildRecapPayload(APP_URL, "OFFICE", "Office", recap, week);
+    const text = payload.blocks.map((block) => JSON.stringify(block)).join("\n");
+    expect(text).toContain("*Badges changed hands*");
+    expect(text).toContain(":crossed_swords:  *Giant Killer*: BO. Beat ADA 10–8 from ");
+  });
+
+  it("says whom a badge was taken from, for one holder or a pair", () => {
+    const reason = "Started 4 games in the last 30 days.";
+    const moved = {
+      ...recap,
+      badges: [
+        { name: "Ringleader", emoji: ":mega:", holders: ["Ada"], previous: ["Bo"], reason },
+        {
+          name: "Giant Killer",
+          emoji: ":crossed_swords:",
+          holders: ["Cy", "Di <b>"],
+          previous: ["Ada", "Bo"],
+          reason: "Beat Ada & Bo 10–6 from 80 rating points down.",
+        },
+      ],
+    };
+    const payload = buildRecapPayload(APP_URL, "OFFICE", "Office", moved, week);
+    const section = payload.blocks.find((block) =>
+      JSON.stringify(block).includes("Badges changed hands"),
+    ) as { text: { text: string } };
+
+    expect(section.text.text.split("\n")).toEqual([
+      "*Badges changed hands*",
+      `:mega:  *Ringleader*: Ada takes it from Bo. ${reason}`,
+      ":crossed_swords:  *Giant Killer*: Cy & Di &lt;b&gt; take it from Ada & Bo. Beat Ada &amp; Bo 10–6 from 80 rating points down.",
+    ]);
+  });
+
+  it("leaves the badges out in a week when none moved", () => {
+    const payload = buildRecapPayload(APP_URL, "OFFICE", "Office", { ...recap, badges: [] }, week);
+
+    expect(JSON.stringify(payload.blocks)).not.toContain("Badges changed hands");
+  });
+
   it("lists the top of the table, flagging ratings built on only a few games", () => {
     expect(recap.top).toHaveLength(3);
     expect(recap.top[0].rating).toBeGreaterThanOrEqual(recap.top[1].rating);
