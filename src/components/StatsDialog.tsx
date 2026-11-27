@@ -91,7 +91,7 @@ const BadgeRow = styled.div<{ vacant?: boolean }>`
   color: ${(props) =>
     props.vacant ? "var(--md-sys-color-on-surface-variant)" : "var(--md-sys-color-on-surface)"};
   /* The icon. */
-  & > :first-child {
+  & > span:first-of-type {
     flex: none;
     margin-top: 0.05rem;
     color: ${(props) =>
@@ -134,14 +134,50 @@ const Form = styled.span<{ won: boolean }>`
 
 // The dialog is as tall as the screen allows and laid out as a column, so the figures stay
 // put and only the match list below them scrolls.
+// Where the screen has the width for it, the dialog is twice as wide and the matches
+// stand beside the figures instead of under them, so the list gets the dialog's whole
+// height rather than whatever the figures and badges leave over.
+const WIDE = "@media (min-width: 52rem)";
+
 const Sheet = styled(Dialog)`
   max-height: calc(100dvh - 2rem);
   /* Only reached on a screen too short for the figures plus a few matches */
   overflow-y: auto;
+  ${WIDE} {
+    /* Only with figures to show: the note for a player without games stays small. */
+    &[data-wide] {
+      width: min(50rem, calc(100vw - 2rem));
+    }
+  }
   ${thinScrollbar}
   &[open] {
     display: flex;
     flex-direction: column;
+  }
+`;
+
+// The two columns of the wide layout. On a narrow screen neither is a box of its own,
+// and everything inside is laid out by the dialog's single column as before.
+const Body = styled.div`
+  display: contents;
+  ${WIDE} {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 1.5rem;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+`;
+
+const Figures = styled.div`
+  display: contents;
+  ${WIDE} {
+    display: block;
+    min-height: 0;
+    /* Only reached on a screen too short for the figures */
+    overflow-y: auto;
+    ${thinScrollbar}
   }
 `;
 
@@ -156,6 +192,12 @@ const History = styled.div`
   border-top: 1px solid var(--md-sys-color-outline-variant);
   /* The dialog already sits on the tone match entries normally use */
   --match-entry-bg: var(--md-sys-color-surface-container-lowest);
+  ${WIDE} {
+    /* Beside the figures, with nothing above it to be divided from */
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
 `;
 
 const HistoryScroll = styled.div`
@@ -332,6 +374,7 @@ export const StatsDialog = ({
     <Sheet
       ref={dialogRef}
       aria-labelledby="stats-title"
+      data-wide={player ? "" : undefined}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -367,7 +410,8 @@ export const StatsDialog = ({
           {START_RATING}.
         </Hint>
       ) : (
-        <>
+        <Body>
+          <Figures>
           <Metrics>
             <Metric>
               <MetricLabel>Rating</MetricLabel>
@@ -436,6 +480,7 @@ export const StatsDialog = ({
           </Line>
 
           <BadgeSection uid={player.uid} badges={badges} tableName={tableName} />
+          </Figures>
 
           <History>
             <HistoryLabel>{own ? "Your" : `${firstName(player.displayName)}'s`} matches</HistoryLabel>
@@ -449,7 +494,7 @@ export const StatsDialog = ({
               />
             </HistoryScroll>
           </History>
-        </>
+        </Body>
       )}
     </Sheet>
   );
