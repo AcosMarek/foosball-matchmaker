@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { BADGES, badgeChanges, badgesAt, type BadgeId, type HeldBadge } from "./badges";
+import {
+  BADGES,
+  badgeChanges,
+  badgesAt,
+  badgesWonIn,
+  describeBadgeChange,
+  type BadgeChange,
+  type BadgeId,
+  type HeldBadge,
+} from "./badges";
 import { computeStats, type RatedTeam, type ScoredMatch } from "./ratings";
 
 const TABLE = "TABLE1";
@@ -260,6 +269,79 @@ describe("badges", () => {
       const ids = badgeChanges(stats, TABLE, day(50), NOW).map((entry) => entry.badge.id);
 
       expect(ids).not.toContain("ringleader");
+    });
+  });
+});
+
+describe("badges won in a game", () => {
+  it("names the badge a game handed to one of its players", () => {
+    const boLeads = [40, 41, 42].map((at) => game(at, ["ada"], ["bo"], { startedBy: "bo" }));
+    const level = [51, 52, 53].map((at) => game(at, ["ada"], ["bo"], { startedBy: "ada" }));
+    const passing = game(54, ["ada"], ["bo"], { startedBy: "ada" });
+    const stats = computeStats([...boLeads, ...level, passing]);
+    const ringleader = (sessionId: string): BadgeChange | undefined =>
+      badgesWonIn(stats, stats.matches[sessionId]).find(
+        (change) => change.badge.id === "ringleader",
+      );
+
+    // Drawing level with Bo changes nothing; the game after it does.
+    expect(ringleader(level[2].sessionId)).toBeUndefined();
+    expect(ringleader(passing.sessionId)).toMatchObject({
+      holders: [{ uid: "ada" }],
+      previous: [{ uid: "bo" }],
+      reason: "Started 4 games in the last 30 days.",
+    });
+  });
+
+  it("leaves out a badge the game sent to someone who wasn't playing", () => {
+    // Ada holds The Wall on 2 a game, ahead of Cy on 3. Two heavy defeats later it is
+    // Cy's, and Cy was in neither game.
+    const ada = [40, 41, 42, 43, 44, 45, 46, 47].map((at) =>
+      game(at, ["ada"], ["bo"], { loserGoals: 2 }),
+    );
+    const cy = [40, 41, 42, 43, 44, 45, 46, 47].map((at) =>
+      game(at, ["cy"], ["di"], { loserGoals: 3 }),
+    );
+    const defeats = [50, 51].map((at) => game(at, ["bo"], ["ada"], { loserGoals: 0 }));
+    const stats = computeStats([...ada, ...cy, ...defeats]);
+    const last = stats.matches[defeats[1].sessionId];
+    const moved = badgeChanges(stats, TABLE, last.startedAt, new Date(last.startedAt.getTime() + 1));
+
+    expect(moved.find((change) => change.badge.id === "wall")?.holders[0].uid).toBe("cy");
+    expect(badgesWonIn(stats, last).map((change) => change.badge.id)).not.toContain("wall");
+  });
+
+  describe("in words", () => {
+    const person = (uid: string) => ({ uid, displayName: `${uid.charAt(0).toUpperCase()}${uid.slice(1)} Olsen` });
+    const change = (holders: string[], previous: string[]): BadgeChange => ({
+      badge: BADGES[0],
+      holders: holders.map(person),
+      previous: previous.map(person),
+      reason: "",
+    });
+
+    it("speaks to the player who won it", () => {
+      expect(describeBadgeChange(change(["ada"], ["bo"]), "ada")).toBe("You take it from Bo.");
+      expect(describeBadgeChange(change(["ada"], []), "ada")).toBe("You have it now.");
+      expect(describeBadgeChange(change(["cy", "di"], ["ada", "bo"]), "di")).toBe(
+        "You and Cy take it from Ada & Bo.",
+      );
+    });
+
+    it("names the winner to everyone else", () => {
+      expect(describeBadgeChange(change(["ada"], ["bo"]), "cy")).toBe("Ada takes it from Bo.");
+      expect(describeBadgeChange(change(["ada"], []))).toBe("Ada has it now.");
+      expect(describeBadgeChange(change(["cy", "di"], ["ada", "bo"]), "ed")).toBe(
+        "Cy & Di take it from Ada & Bo.",
+      );
+      expect(describeBadgeChange(change(["cy", "di"], []))).toBe("Cy & Di have it now.");
+    });
+
+    it("speaks to the player it was taken from", () => {
+      expect(describeBadgeChange(change(["ada"], ["bo"]), "bo")).toBe("Ada takes it from you.");
+      expect(describeBadgeChange(change(["cy", "di"], ["ada", "bo"]), "bo")).toBe(
+        "Cy & Di take it from you and Ada.",
+      );
     });
   });
 });

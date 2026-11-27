@@ -32,7 +32,7 @@ import { StatsDialog } from "./components/StatsDialog";
 import { matchesFor, tableStandings } from "./ratings";
 import { matchCommentary } from "./commentary";
 import { beltOf, describeBeltEvent } from "./belt";
-import { badgesAt } from "./badges";
+import { badgesAt, badgesWonIn } from "./badges";
 import { RecordResultCard } from "./components/RecordResultCard";
 import { ResultCelebration } from "./components/ResultCelebration";
 import { QrCard } from "./components/QrCard";
@@ -256,6 +256,12 @@ export default function App() {
   const pendingResults = usePendingResults(user, recentSessions);
   const justScored = useJustScored(pendingResults, recentSessions);
   useScoreReminders(user, selectedTable, recentSessions);
+  // The match just scored, once the ratings include it, and the badges it handed out.
+  const scoredMatch = (justScored.session && stats?.matches[justScored.session.id]) || null;
+  const badgesWon = useMemo(
+    () => (stats && scoredMatch ? badgesWonIn(stats, scoredMatch) : []),
+    [stats, scoredMatch],
+  );
 
   const selectedTableName =
     visited.find((table) => table.code === selectedTable)?.name ||
@@ -340,8 +346,9 @@ export default function App() {
             <ResultCelebration
               key={justScored.session.id}
               session={justScored.session}
-              match={stats?.matches[justScored.session.id] ?? null}
+              match={scoredMatch}
               note={notes[justScored.session.id]}
+              badges={badgesWon}
               currentUid={user.uid}
               onClose={justScored.clear}
             />

@@ -3,6 +3,7 @@ import styled from "@emotion/styled";
 import { matchSizeLabel, teamCssColor } from "../matchmaking";
 import { prefersReducedMotion } from "../motion";
 import { formatDelta, type MatchRating } from "../ratings";
+import { describeBadgeChange, type BadgeChange } from "../badges";
 import { Eyebrow, Icon, IconButton, OutlinedCard } from "../ui";
 import type { Session } from "../types";
 
@@ -44,6 +45,21 @@ const Remark = styled.p`
   font-style: italic;
   color: var(--md-sys-color-on-surface);
   animation: riseIn 0.4s ease-out 0.2s both;
+`;
+
+// A badge this game handed to one of its players, in one line: the badge, who has it
+// now and whom they took it from. The figures behind it are in the statistics dialog.
+const WonLine = styled.p`
+  margin: 0.6rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--md-sys-color-on-surface);
+  animation: riseIn 0.4s ease-out 0.5s both;
+  & > span:first-of-type {
+    vertical-align: -0.2em;
+    margin-right: 0.3em;
+    color: var(--md-sys-color-primary);
+  }
 `;
 
 const RatingRow = styled.div`
@@ -91,6 +107,8 @@ const COUNT_UP_DELAY_MS = 400;
 const COUNT_UP_MS = 900;
 // Long enough to read, short enough that the card isn't still there for the next match.
 const AUTO_CLOSE_MS = 12000;
+// A badge is one more line to read.
+const BADGE_READ_MS = 2500;
 
 // Counts from `from` to `to` once `active`, easing out. Only how far along it is gets
 // stored, so the number shown is always worked out from the current `from` and `to`: the
@@ -134,6 +152,8 @@ type Props = {
   match: MatchRating | null;
   // The commentary line for this match, once the ratings include it.
   note?: string;
+  // The badges this match handed to its players, once the ratings include it.
+  badges?: BadgeChange[];
   currentUid: string;
   onClose: () => void;
 };
@@ -142,7 +162,14 @@ type Props = {
 // winning side's colour, and for the winners their rating counting up. The losing side
 // gets the same card without the numbers: the leaderboard is there for anyone who wants
 // to see what the game cost them, and nobody needs it counted down in front of them.
-export const ResultCelebration = ({ session, match, note, currentUid, onClose }: Props) => {
+export const ResultCelebration = ({
+  session,
+  match,
+  note,
+  badges = [],
+  currentUid,
+  onClose,
+}: Props) => {
   const result = session.result;
   const redWon = !!result && result.red > result.blue;
   const winner = redWon ? "Red" : "Blue";
@@ -158,11 +185,14 @@ export const ResultCelebration = ({ session, match, note, currentUid, onClose }:
   const showRating = won && before !== undefined;
   const rating = useCountUp(before ?? 0, (before ?? 0) + gain, showRating);
 
+  // The badges arrive with the ratings, a moment after the card; the wait starts over
+  // then, so they get their full time.
+  const readingTime = AUTO_CLOSE_MS + badges.length * BADGE_READ_MS;
   useEffect(() => {
-    const timer = setTimeout(onClose, AUTO_CLOSE_MS);
+    const timer = setTimeout(onClose, readingTime);
 
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, [onClose, readingTime]);
 
   // Thrown once per match: each piece gets its own direction, spin and head start.
   const pieces = useMemo(() => {
@@ -233,6 +263,14 @@ export const ResultCelebration = ({ session, match, note, currentUid, onClose }:
         <span style={redWon ? undefined : { color: winnerColor }}>{result.blue} Blue</span>
       </Score>
       {note && <Remark>{note}</Remark>}
+      {badges.map((change) => (
+        <WonLine key={change.badge.id}>
+          <Icon size={18} aria-hidden>
+            {change.badge.icon}
+          </Icon>
+          <strong>{change.badge.name}</strong>: {describeBadgeChange(change, currentUid)}
+        </WonLine>
+      ))}
       {showRating ? (
         <>
           <Line>Nice win. Your rating</Line>

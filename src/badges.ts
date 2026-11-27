@@ -330,3 +330,38 @@ export const badgeChanges = (
     return sameHolders(previous, held.holders) ? [] : [{ ...held, previous }];
   });
 };
+
+// The badges one game handed to someone who played in it: what was held the moment
+// before it, against the moment after. A badge the game sent elsewhere (a player lets in
+// ten and The Wall passes to someone who wasn't there) is left for the weekly recap.
+export const badgesWonIn = (stats: RatingStats, match: MatchRating): BadgeChange[] => {
+  const played = new Set(match.teams.flatMap((team) => team.players.map((player) => player.uid)));
+  const before = match.startedAt;
+  const after = new Date(before.getTime() + 1);
+
+  return badgeChanges(stats, match.tableCode, before, after).filter((change) =>
+    change.holders.some((holder) => played.has(holder.uid)),
+  );
+};
+
+// "You take it from Jonas.", "Ada takes it from you.", "Ada & Bo have it now.": who has
+// the badge and whom they took it from, worded for `viewerUid` when they are on either
+// side of it.
+export const describeBadgeChange = (change: BadgeChange, viewerUid = ""): string => {
+  // First names, with the viewer as `you` when they are among them.
+  const named = (holders: BadgeHolder[], you: string): string => {
+    const others = holders.filter((holder) => holder.uid !== viewerUid);
+
+    return others.length === holders.length
+      ? firstNames(holders)
+      : [you, ...others.map((holder) => firstNames([holder]))].join(" and ");
+  };
+  const mine = change.holders.some((holder) => holder.uid === viewerUid);
+  // "You" takes the plural, as two holders do.
+  const several = mine || change.holders.length > 1;
+  const who = named(change.holders, "You");
+
+  return change.previous.length > 0
+    ? `${who} take${several ? "" : "s"} it from ${named(change.previous, "you")}.`
+    : `${who} ${several ? "have" : "has"} it now.`;
+};
